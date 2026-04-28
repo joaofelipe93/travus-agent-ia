@@ -12,7 +12,9 @@
     "dev": "node src/index.js"
   },
   "dependencies": {
+    "baileys": "^7.0.0-rc.9",
     "dotenv": "^17.4.2",
-    "openai": "^6.35.0"
+    "openai": "^6.35.0",
+    "qrcode-terminal": "^0.12.0"
   }
 }
