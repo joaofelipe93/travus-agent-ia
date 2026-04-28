@@ -1,0 +1,18 @@
+{
+  "name": "travus-agent-ia",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Backend Node.js que conecta o WhatsApp a um agente da DigitalOcean Gradient AI Platform.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test:agent": "node scripts/test-agent.js",
+    "dev": "node src/index.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "openai": "^6.35.0"
+  }
+}
