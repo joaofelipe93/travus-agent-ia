@@ -4,6 +4,7 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
 } from "baileys";
 import qrcode from "qrcode-terminal";
+import { askAgent } from "./agent.js";
 
 const SESSION_DIR = "./.baileys-auth";
 const RECONNECT_DELAY_MS = 2000;
@@ -78,27 +79,38 @@ export async function startWhatsApp() {
     }
   });
 
-  sock.ev.on("messages.upsert", ({ messages, type }) => {
+  sock.ev.on("messages.upsert", async ({ messages, type }) => {
     if (type !== "notify") return;
 
     for (const msg of messages) {
       if (!msg.message || msg.key.fromMe) continue;
+
+      const from = msg.key.remoteJid;
+
+      if (from?.endsWith("@g.us")) {
+        console.log(`[GRUPO] ${from} → (ignorado)`);
+        continue;
+      }
 
       const text =
         msg.message.conversation ??
         msg.message.extendedTextMessage?.text ??
         null;
 
-      const from = msg.key.remoteJid;
-      const origem = from?.endsWith("@g.us") ? "GRUPO" : "DIRETO";
-
-      if (text) {
-        console.log(`[${origem}] ${from} → ${text}`);
-      } else {
+      if (!text) {
         const tipos = Object.keys(msg.message).filter((k) => msg.message[k]);
-        console.log(
-          `[${origem}] ${from} → (mensagem não-texto: ${tipos.join(", ")})`
-        );
+        console.log(`[DIRETO] ${from} → (não-texto: ${tipos.join(", ")}) — ignorado`);
+        continue;
+      }
+
+      console.log(`[DIRETO] ${from} → ${text}`);
+
+      try {
+        const resposta = await askAgent(text);
+        await sock.sendMessage(from, { text: resposta });
+        console.log(`[AGENTE] → ${from}: ${resposta.slice(0, 80)}${resposta.length > 80 ? "…" : ""}`);
+      } catch (err) {
+        console.error(`[ERRO] Falha ao consultar agente para ${from}: ${err?.message ?? err}`);
       }
     }
   });
