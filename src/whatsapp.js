@@ -1,10 +1,12 @@
 import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
+  fetchLatestBaileysVersion,
 } from "baileys";
 import qrcode from "qrcode-terminal";
 
 const SESSION_DIR = "./.baileys-auth";
+const RECONNECT_DELAY_MS = 2000;
 
 const silentLogger = {
   level: "silent",
@@ -20,9 +22,24 @@ const silentLogger = {
 export async function startWhatsApp() {
   const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
 
+  let version;
+  try {
+    const info = await fetchLatestBaileysVersion();
+    version = info.version;
+    console.log(
+      `[INFO] WhatsApp Web protocolo v${version.join(".")} (latest=${info.isLatest})`
+    );
+  } catch (err) {
+    console.log(
+      "[AVISO] Falha ao buscar versão mais recente do WhatsApp Web; usando padrão do Baileys."
+    );
+  }
+
   const sock = makeWASocket({
     auth: state,
     logger: silentLogger,
+    version,
+    browser: ["Travus Bot", "Chrome", "120.0.0"],
   });
 
   sock.ev.on("creds.update", saveCreds);
@@ -44,6 +61,7 @@ export async function startWhatsApp() {
 
     if (connection === "close") {
       const code = lastDisconnect?.error?.output?.statusCode;
+      const msg = lastDisconnect?.error?.message ?? "?";
       const loggedOut = code === DisconnectReason.loggedOut;
 
       if (loggedOut) {
@@ -53,8 +71,10 @@ export async function startWhatsApp() {
         process.exit(1);
       }
 
-      console.log(`[AVISO] Conexão encerrada (code=${code}). Reconectando...`);
-      startWhatsApp();
+      console.log(
+        `[AVISO] Conexão encerrada (code=${code}, msg=${msg}). Reconectando em ${RECONNECT_DELAY_MS}ms...`
+      );
+      setTimeout(() => startWhatsApp(), RECONNECT_DELAY_MS);
     }
   });
 
