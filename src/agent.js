@@ -1,5 +1,4 @@
 import OpenAI from "openai";
-import { readFileSync } from "node:fs";
 
 const { AGENTENDPOINT, SECRETKEYAGENT } = process.env;
 
@@ -14,16 +13,8 @@ const client = new OpenAI({
   apiKey: SECRETKEYAGENT,
 });
 
-let systemPrompt = "";
-try {
-  systemPrompt = readFileSync("./INSTRUCAOAGENT.md", "utf-8");
-} catch {
-  console.warn("[AVISO] INSTRUCAOAGENT.md não encontrado — agente sem system prompt local.");
-}
-
 export async function askAgent(history, userMessage, _client = client) {
   const messages = [
-    ...(systemPrompt ? [{ role: "system", content: systemPrompt }] : []),
     ...history,
     { role: "user", content: userMessage },
   ];
