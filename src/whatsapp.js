@@ -5,7 +5,7 @@ import makeWASocket, {
 } from "baileys";
 import qrcode from "qrcode-terminal";
 import { askAgent } from "./agent.js";
-import { getHistory, addMessage, clearHistory } from "./db.js";
+import { getOrStartConversation, getHistory, addMessage, completeConversation } from "./db.js";
 import { enviarLeadPipeRun } from "./piperun.js";
 
 const SESSION_DIR = "./.baileys-auth";
@@ -119,11 +119,12 @@ export async function startWhatsApp() {
       console.log(`[DIRETO] ${from} → ${text}`);
 
       try {
-        const history = getHistory(from);
-        addMessage(from, "user", text);
+        const convId = getOrStartConversation(from);
+        const history = getHistory(convId);
+        addMessage(convId, "user", text);
 
         const resposta = await askAgent(history, text);
-        addMessage(from, "assistant", resposta);
+        addMessage(convId, "assistant", resposta);
 
         await sock.sendMessage(from, { text: resposta });
         console.log(`[AGENTE] → ${from}: ${resposta.slice(0, 80)}${resposta.length > 80 ? "…" : ""}`);
@@ -132,8 +133,8 @@ export async function startWhatsApp() {
         if (lead) {
           try {
             await enviarLeadPipeRun(lead);
-            console.log(`[CRM] Lead enviado para Piperun: ${lead.nome} <${lead.email}>`);
-            clearHistory(from);
+            completeConversation(convId, lead);
+            console.log(`[CRM] Lead enviado para Piperun: ${lead.nome} | ${lead.celular}`);
           } catch (crmErr) {
             console.error(`[CRM] Erro ao enviar para Piperun: ${crmErr?.message ?? crmErr}`);
           }

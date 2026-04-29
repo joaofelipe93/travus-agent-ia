@@ -11,7 +11,7 @@ export async function enviarLeadPipeRun({ nome, email, celular, renda_mensal, da
     rules: { update: true, status: "open", equal_pipeline: true, filter_status_update: "open" },
     leads: [
       {
-        id: email,
+        id: celular,
         title: `Lead WhatsApp Travus - ${nome}`,
         name: nome,
         email: email,
