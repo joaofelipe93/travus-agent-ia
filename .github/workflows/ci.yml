@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - "milestone-*"
+      - "feat/**"
+      - "fix/**"
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  verificar:
+    name: Verificar código
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Verificar sintaxe dos arquivos JavaScript
+        run: find src scripts -name "*.js" | xargs -I{} node --check {}
+
+      - name: Verificar vulnerabilidades
+        # continue-on-error enquanto o Milestone 4 não resolve as vulns
+        # transitivas do protobufjs via baileys (issue conhecido)
+        continue-on-error: true
+        run: npm audit --audit-level=high
+
+      - name: Testar conexão com agente DigitalOcean
+        env:
+          AGENTENDPOINT: ${{ secrets.AGENTENDPOINT }}
+          SECRETKEYAGENT: ${{ secrets.SECRETKEYAGENT }}
+        run: |
+          if [ -n "$AGENTENDPOINT" ] && [ -n "$SECRETKEYAGENT" ]; then
+            npm run test:agent
+          else
+            echo "Secrets AGENTENDPOINT e SECRETKEYAGENT não configuradas no repositório."
+            echo "Configure em: Settings → Secrets and variables → Actions → New repository secret"
+            echo "Pulando teste de integração com o agente."
+          fi
