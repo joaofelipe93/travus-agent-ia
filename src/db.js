@@ -78,19 +78,17 @@ export function addMessage(conversationId, role, content) {
   db.prepare("UPDATE conversations SET updated_at = unixepoch() WHERE id = ?").run(conversationId);
 }
 
-export function completeConversation(conversationId, leadData) {
-  db.transaction((convId, data) => {
-    db.prepare("UPDATE conversations SET status = 'completed', updated_at = unixepoch() WHERE id = ?").run(convId);
+export function recordLeadCapture(conversationId, leadData) {
+  const { phone } = db.prepare("SELECT phone FROM conversations WHERE id = ?").get(conversationId);
 
-    const { phone } = db.prepare("SELECT phone FROM conversations WHERE id = ?").get(convId);
+  db.prepare(`
+    INSERT OR IGNORE INTO leads (conversation_id, phone, nome, email, celular, renda_mensal, data_agendamento, hora_agendamento, piperun_sent_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
+  `).run(
+    conversationId, phone,
+    leadData.nome ?? null, leadData.email ?? null, leadData.celular ?? null,
+    leadData.renda_mensal ?? null, leadData.data_agendamento ?? null, leadData.hora_agendamento ?? null,
+  );
 
-    db.prepare(`
-      INSERT INTO leads (conversation_id, phone, nome, email, celular, renda_mensal, data_agendamento, hora_agendamento, piperun_sent_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
-    `).run(
-      convId, phone,
-      data.nome ?? null, data.email ?? null, data.celular ?? null,
-      data.renda_mensal ?? null, data.data_agendamento ?? null, data.hora_agendamento ?? null,
-    );
-  })(conversationId, leadData);
+  db.prepare("UPDATE conversations SET updated_at = unixepoch() WHERE id = ?").run(conversationId);
 }

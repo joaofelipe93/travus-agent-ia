@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 process.env.DB_PATH = ":memory:";
 
-const { phoneFromJid, getOrStartConversation, getHistory, addMessage, completeConversation } =
+const { phoneFromJid, getOrStartConversation, getHistory, addMessage, recordLeadCapture } =
   await import("../src/db.js");
 
 const JID = "5511991234567@s.whatsapp.net";
@@ -48,8 +48,8 @@ describe("addMessage e getHistory", () => {
   });
 });
 
-describe("completeConversation", () => {
-  test("marca conversa como completed e salva dados do lead", () => {
+describe("recordLeadCapture", () => {
+  test("salva dados do lead e mantém conversa ativa para follow-up", () => {
     const jid = "5531912345678@s.whatsapp.net";
     const convId = getOrStartConversation(jid);
     addMessage(convId, "user", "quero investir");
@@ -63,10 +63,21 @@ describe("completeConversation", () => {
       hora_agendamento: "14:00",
     };
 
-    completeConversation(convId, lead);
+    recordLeadCapture(convId, lead);
 
-    // nova mensagem deve abrir conversa nova
-    const novoConvId = getOrStartConversation(jid);
-    assert.notEqual(novoConvId, convId);
+    // conversa continua ativa — follow-up usa o mesmo id
+    const mesmoConvId = getOrStartConversation(jid);
+    assert.equal(mesmoConvId, convId);
+  });
+
+  test("INSERT OR IGNORE não duplica o lead se chamado duas vezes", () => {
+    const jid = "5541911111111@s.whatsapp.net";
+    const convId = getOrStartConversation(jid);
+    const lead = { nome: "Pedro", email: "pedro@email.com", celular: "5541911111111" };
+
+    assert.doesNotThrow(() => {
+      recordLeadCapture(convId, lead);
+      recordLeadCapture(convId, lead);
+    });
   });
 });

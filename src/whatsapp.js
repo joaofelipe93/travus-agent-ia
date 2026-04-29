@@ -5,7 +5,7 @@ import makeWASocket, {
 } from "baileys";
 import qrcode from "qrcode-terminal";
 import { askAgent } from "./agent.js";
-import { getOrStartConversation, getHistory, addMessage, completeConversation } from "./db.js";
+import { getOrStartConversation, getHistory, addMessage, recordLeadCapture } from "./db.js";
 import { enviarLeadPipeRun } from "./piperun.js";
 
 const SESSION_DIR = "./.baileys-auth";
@@ -22,15 +22,18 @@ const silentLogger = {
   child: () => silentLogger,
 };
 
-function extractLeadJson(text) {
+function processAgentResponse(text) {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
-  if (start === -1 || end <= start) return null;
+  if (start === -1 || end <= start) return { cleanText: text, lead: null };
   try {
     const data = JSON.parse(text.slice(start, end + 1));
-    if (data.nome && data.email && data.celular) return data;
+    if (data.nome && data.email && data.celular) {
+      const cleanText = (text.slice(0, start) + text.slice(end + 1)).trim();
+      return { cleanText: cleanText || null, lead: data };
+    }
   } catch {}
-  return null;
+  return { cleanText: text, lead: null };
 }
 
 export async function startWhatsApp() {
@@ -126,14 +129,17 @@ export async function startWhatsApp() {
         const resposta = await askAgent(history, text);
         addMessage(convId, "assistant", resposta);
 
-        await sock.sendMessage(from, { text: resposta });
-        console.log(`[AGENTE] → ${from}: ${resposta.slice(0, 80)}${resposta.length > 80 ? "…" : ""}`);
+        const { cleanText, lead } = processAgentResponse(resposta);
 
-        const lead = extractLeadJson(resposta);
+        if (cleanText) {
+          await sock.sendMessage(from, { text: cleanText });
+          console.log(`[AGENTE] → ${from}: ${cleanText.slice(0, 80)}${cleanText.length > 80 ? "…" : ""}`);
+        }
+
         if (lead) {
           try {
             await enviarLeadPipeRun(lead);
-            completeConversation(convId, lead);
+            recordLeadCapture(convId, lead);
             console.log(`[CRM] Lead enviado para Piperun: ${lead.nome} | ${lead.celular}`);
           } catch (crmErr) {
             console.error(`[CRM] Erro ao enviar para Piperun: ${crmErr?.message ?? crmErr}`);
