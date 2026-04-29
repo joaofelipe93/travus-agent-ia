@@ -5,6 +5,8 @@ import makeWASocket, {
 } from "baileys";
 import qrcode from "qrcode-terminal";
 import { askAgent } from "./agent.js";
+import { getHistory, addMessage, clearHistory } from "./db.js";
+import { enviarLeadPipeRun } from "./piperun.js";
 
 const SESSION_DIR = "./.baileys-auth";
 const RECONNECT_DELAY_MS = 2000;
@@ -20,6 +22,17 @@ const silentLogger = {
   child: () => silentLogger,
 };
 
+function extractLeadJson(text) {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end <= start) return null;
+  try {
+    const data = JSON.parse(text.slice(start, end + 1));
+    if (data.nome && data.email && data.celular) return data;
+  } catch {}
+  return null;
+}
+
 export async function startWhatsApp() {
   const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
 
@@ -30,7 +43,7 @@ export async function startWhatsApp() {
     console.log(
       `[INFO] WhatsApp Web protocolo v${version.join(".")} (latest=${info.isLatest})`
     );
-  } catch (err) {
+  } catch {
     console.log(
       "[AVISO] Falha ao buscar versão mais recente do WhatsApp Web; usando padrão do Baileys."
     );
@@ -106,9 +119,25 @@ export async function startWhatsApp() {
       console.log(`[DIRETO] ${from} → ${text}`);
 
       try {
-        const resposta = await askAgent(text);
+        const history = getHistory(from);
+        addMessage(from, "user", text);
+
+        const resposta = await askAgent(history, text);
+        addMessage(from, "assistant", resposta);
+
         await sock.sendMessage(from, { text: resposta });
         console.log(`[AGENTE] → ${from}: ${resposta.slice(0, 80)}${resposta.length > 80 ? "…" : ""}`);
+
+        const lead = extractLeadJson(resposta);
+        if (lead) {
+          try {
+            await enviarLeadPipeRun(lead);
+            console.log(`[CRM] Lead enviado para Piperun: ${lead.nome} <${lead.email}>`);
+            clearHistory(from);
+          } catch (crmErr) {
+            console.error(`[CRM] Erro ao enviar para Piperun: ${crmErr?.message ?? crmErr}`);
+          }
+        }
       } catch (err) {
         console.error(`[ERRO] Falha ao consultar agente para ${from}: ${err?.message ?? err}`);
       }
