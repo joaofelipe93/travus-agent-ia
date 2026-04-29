@@ -30,7 +30,7 @@ echo "==> Aguardando o cliente escanear o QR code..."
 echo "    WhatsApp → Configurações → Aparelhos conectados → Conectar um aparelho"
 echo ""
 
-sudo -u "$APP_USER" stdbuf -oL node "$APP_DIR/src/index.js" 2>&1 | stdbuf -oL tee "$TMPLOG" &
+sudo -u "$APP_USER" bash -c "cd '$APP_DIR' && stdbuf -oL node src/index.js" 2>&1 | stdbuf -oL tee "$TMPLOG" &
 PIPE_PID=$!
 
 until grep -q "\[OK\] Conectado ao WhatsApp" "$TMPLOG" 2>/dev/null; do
