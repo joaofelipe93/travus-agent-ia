@@ -8,6 +8,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "test": "node --test 'tests/**/*.test.js'",
     "test:agent": "node scripts/test-agent.js",
     "dev": "node src/index.js"
   },
