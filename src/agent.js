@@ -13,10 +13,15 @@ const client = new OpenAI({
   apiKey: SECRETKEYAGENT,
 });
 
-export async function askAgent(userMessage, _client = client) {
+export async function askAgent(history, userMessage, _client = client) {
+  const messages = [
+    ...history,
+    { role: "user", content: userMessage },
+  ];
+
   const response = await _client.chat.completions.create({
     model: "n/a",
-    messages: [{ role: "user", content: userMessage }],
+    messages,
   });
 
   return response.choices[0]?.message?.content ?? "";
