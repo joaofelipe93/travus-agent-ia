@@ -32,6 +32,9 @@ jobs:
       - name: Verificar sintaxe dos arquivos JavaScript
         run: find src scripts -name "*.js" | xargs -I{} node --check {}
 
+      - name: Rodar testes unitários
+        run: npm test
+
       - name: Verificar vulnerabilidades
         # continue-on-error enquanto o Milestone 4 não resolve as vulns
         # transitivas do protobufjs via baileys (issue conhecido)
