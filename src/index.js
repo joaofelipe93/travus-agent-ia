@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { startWhatsApp } from "./whatsapp.js";
+import { startWhatsApp } from "./whatsapp/index.js";
 
 console.log("Iniciando bot WhatsApp ↔ Agente DigitalOcean...");
 
