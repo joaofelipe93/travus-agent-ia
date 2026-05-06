@@ -28,7 +28,6 @@ function currentDateTime() {
 export async function askAgent(history, userMessage, _client = client) {
   const messageWithContext = `[Data e horário em Brasília: ${currentDateTime()}]\n\n${userMessage}`;
   const messages = [
-    currentDateTimeMessage(),
     ...history,
     { role: "user", content: messageWithContext },
   ];
