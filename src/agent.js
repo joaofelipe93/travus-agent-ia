@@ -13,8 +13,8 @@ const client = new OpenAI({
   apiKey: SECRETKEYAGENT,
 });
 
-function currentDateTimeMessage() {
-  const now = new Date().toLocaleString("pt-BR", {
+function currentDateTime() {
+  return new Date().toLocaleString("pt-BR", {
     timeZone: "America/Sao_Paulo",
     weekday: "long",
     year: "numeric",
@@ -23,14 +23,14 @@ function currentDateTimeMessage() {
     hour: "2-digit",
     minute: "2-digit",
   });
-  return { role: "system", content: `Data e horário atuais em Brasília: ${now}.` };
 }
 
 export async function askAgent(history, userMessage, _client = client) {
+  const messageWithContext = `[Data e horário em Brasília: ${currentDateTime()}]\n\n${userMessage}`;
   const messages = [
     currentDateTimeMessage(),
     ...history,
-    { role: "user", content: userMessage },
+    { role: "user", content: messageWithContext },
   ];
 
   const response = await _client.chat.completions.create({
