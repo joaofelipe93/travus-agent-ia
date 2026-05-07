@@ -2,6 +2,7 @@ import { askAgent } from "./agent.js";
 import { getOrStartConversation, getHistory, addMessage, recordLeadCapture } from "./db.js";
 import { enviarLeadPipeRun } from "./integrations/piperun.js";
 import { createCalendarEvent } from "./integrations/calendar.js";
+import { sendWithPresence } from "./whatsapp/presence.js";
 
 function processAgentResponse(text) {
   const start = text.indexOf("{");
@@ -28,7 +29,7 @@ export async function handleMessage(from, text, sock) {
   const { cleanText, lead } = processAgentResponse(resposta);
 
   if (cleanText) {
-    await sock.sendMessage(from, { text: cleanText });
+    await sendWithPresence(sock, from, cleanText);
     console.log(`[AGENTE] → ${from}: ${cleanText.slice(0, 80)}${cleanText.length > 80 ? "…" : ""}`);
   }
 
