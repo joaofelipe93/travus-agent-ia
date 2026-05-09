@@ -1,6 +1,6 @@
 import { google } from "googleapis";
 
-const CALENDAR_ID = "luiz.muniz@travuscapital.com.br";
+const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID ?? "primary";
 const TIMEZONE = "America/Sao_Paulo";
 const EVENT_DURATION_MINUTES = 60;
 
