@@ -25,7 +25,9 @@ describe("askAgent", () => {
     assert.equal(args.model, "n/a");
 
     const lastMessage = args.messages.at(-1);
-    assert.deepEqual(lastMessage, { role: "user", content: "Olá!" });
+    assert.equal(lastMessage.role, "user");
+    assert.match(lastMessage.content, /Data e horário em Brasília:/);
+    assert.ok(lastMessage.content.endsWith("Olá!"), "mensagem do usuário deve ser preservada no final");
   });
 
   test("inclui histórico de conversa nas mensagens enviadas ao agente", async () => {
@@ -43,7 +45,7 @@ describe("askAgent", () => {
     const [args] = mockCreate.mock.calls[0].arguments;
     const msgs = args.messages;
 
-    assert.equal(msgs.at(-1).content, "Tudo bem?");
+    assert.ok(msgs.at(-1).content.endsWith("Tudo bem?"), "última mensagem deve terminar com o texto do usuário");
     assert.ok(msgs.some((m) => m.content === "oi"), "histórico deve estar presente");
   });
 
