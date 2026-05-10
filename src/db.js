@@ -142,6 +142,12 @@ export function markFollowUpSent(conversationId, step) {
   ).run(step, conversationId);
 }
 
+export function closeConversation(conversationId) {
+  db.prepare(
+    "UPDATE conversations SET status = 'closed', updated_at = unixepoch() WHERE id = ?"
+  ).run(conversationId);
+}
+
 export function recordLeadCapture(conversationId, leadData) {
   const { phone } = db.prepare("SELECT phone FROM conversations WHERE id = ?").get(conversationId);
 

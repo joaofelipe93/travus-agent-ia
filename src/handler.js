@@ -1,5 +1,12 @@
 import { askAgent } from "./agent.js";
-import { getOrStartConversation, getHistory, addMessage, recordLeadCapture, phoneFromJid } from "./db.js";
+import {
+  getOrStartConversation,
+  getHistory,
+  addMessage,
+  recordLeadCapture,
+  phoneFromJid,
+  closeConversation,
+} from "./db.js";
 import { enviarLeadPipeRun } from "./integrations/piperun.js";
 import { createCalendarEvent } from "./integrations/calendar.js";
 import { sendWithPresence } from "./whatsapp/presence.js";
@@ -9,21 +16,26 @@ const LEAD_FIELDS = ["nome", "email", "celular", "renda_mensal", "data_agendamen
 function processAgentResponse(text) {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
-  if (start === -1 || end <= start) return { cleanText: text, lead: null };
+  if (start === -1 || end <= start) return { cleanText: text, lead: null, closeReason: null };
 
   let data;
   try {
     data = JSON.parse(text.slice(start, end + 1));
   } catch {
-    return { cleanText: text, lead: null };
+    return { cleanText: text, lead: null, closeReason: null };
   }
 
-  const looksLikeLead = LEAD_FIELDS.some((f) => f in data);
-  if (!looksLikeLead) return { cleanText: text, lead: null };
+  const hasLeadField = LEAD_FIELDS.some((f) => f in data);
+  const hasCloseField = typeof data.encerrar === "string" && data.encerrar.length > 0;
+  if (!hasLeadField && !hasCloseField) return { cleanText: text, lead: null, closeReason: null };
 
   const cleanText = (text.slice(0, start) + text.slice(end + 1)).trim();
   const complete = data.nome && data.email && data.celular;
-  return { cleanText: cleanText || null, lead: complete ? data : null };
+  return {
+    cleanText: cleanText || null,
+    lead: complete ? data : null,
+    closeReason: hasCloseField ? data.encerrar : null,
+  };
 }
 
 function buildAgentInput(text, jid) {
@@ -40,11 +52,16 @@ export async function handleMessage(from, text, sock) {
   const resposta = await askAgent(history, buildAgentInput(text, from));
   addMessage(convId, "assistant", resposta);
 
-  const { cleanText, lead } = processAgentResponse(resposta);
+  const { cleanText, lead, closeReason } = processAgentResponse(resposta);
 
   if (cleanText) {
     await sendWithPresence(sock, from, cleanText);
     console.log(`[AGENTE] → ${from}: ${cleanText.slice(0, 80)}${cleanText.length > 80 ? "…" : ""}`);
+  }
+
+  if (closeReason) {
+    closeConversation(convId);
+    console.log(`[CONVERSA] encerrada (motivo: ${closeReason}) → ${from}`);
   }
 
   if (lead) {
