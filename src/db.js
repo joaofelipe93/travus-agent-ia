@@ -186,30 +186,6 @@ export function recordReminderSent(eventId, reminderType) {
   ).run(eventId, reminderType);
 }
 
-export function getLeadAndJidByCelular(celular) {
-  return db.prepare(`
-    SELECT l.nome, l.celular, c.jid
-      FROM leads l
-      JOIN contacts c ON c.phone = l.phone
-     WHERE l.celular = ?
-     ORDER BY l.created_at DESC
-     LIMIT 1
-  `).get(celular);
-}
-
-export function hasReminderBeenSent(eventId, reminderType) {
-  const row = db.prepare(
-    "SELECT 1 FROM meeting_reminders WHERE event_id = ? AND reminder_type = ?"
-  ).get(eventId, reminderType);
-  return !!row;
-}
-
-export function recordReminderSent(eventId, reminderType) {
-  db.prepare(
-    "INSERT OR IGNORE INTO meeting_reminders (event_id, reminder_type) VALUES (?, ?)"
-  ).run(eventId, reminderType);
-}
-
 export function recordLeadCapture(conversationId, leadData) {
   const { phone } = db.prepare("SELECT phone FROM conversations WHERE id = ?").get(conversationId);
 
