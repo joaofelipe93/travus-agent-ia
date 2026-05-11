@@ -31,6 +31,11 @@ export async function enviarLeadPipeRun({ nome, email, celular, renda_mensal, da
     body: JSON.stringify(body),
   });
 
-  if (!res.ok) throw new Error(`Piperun respondeu com HTTP ${res.status}`);
+  if (!res.ok) {
+    const responseBody = await res.text().catch(() => "(corpo da resposta ilegível)");
+    throw new Error(
+      `Piperun respondeu com HTTP ${res.status}. Payload enviado: ${JSON.stringify(body)}. Resposta: ${responseBody.slice(0, 500)}`
+    );
+  }
   return res.json();
 }
