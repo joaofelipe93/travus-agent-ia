@@ -12,8 +12,11 @@ import { createCalendarEvent } from "./integrations/calendar.js";
 import { sendWithPresence } from "./whatsapp/presence.js";
 
 const LEAD_FIELDS = ["nome", "email", "celular", "renda_mensal", "data_agendamento", "hora_agendamento"];
+const SYSTEM_PREFIX_REGEX = /\[Número do WhatsApp do lead:[^\]]*\]\s*/g;
 
 function processAgentResponse(text) {
+  text = text.replace(SYSTEM_PREFIX_REGEX, "");
+
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start === -1 || end <= start) return { cleanText: text, lead: null, closeReason: null };
