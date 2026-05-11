@@ -5,7 +5,7 @@ import {
   addMessage,
   recordLeadCapture,
   phoneFromJid,
-  closeConversation,
+  disableFollowUps,
 } from "./db.js";
 import { enviarLeadPipeRun } from "./integrations/piperun.js";
 import { createCalendarEvent } from "./integrations/calendar.js";
@@ -60,8 +60,8 @@ export async function handleMessage(from, text, sock) {
   }
 
   if (closeReason) {
-    closeConversation(convId);
-    console.log(`[CONVERSA] encerrada (motivo: ${closeReason}) → ${from}`);
+    disableFollowUps(convId, closeReason);
+    console.log(`[CONVERSA] follow-ups desativados (motivo: ${closeReason}) → ${from} (histórico mantido)`);
   }
 
   if (lead) {
