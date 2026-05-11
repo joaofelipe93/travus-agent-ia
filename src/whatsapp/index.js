@@ -7,6 +7,7 @@ import qrcode from "qrcode-terminal";
 import { handleMessage } from "../handler.js";
 import { enqueue } from "./queue.js";
 import { startFollowUpScheduler } from "./followup.js";
+import { startMeetingReminderScheduler } from "../integrations/meeting-reminders.js";
 
 const SESSION_DIR = "./.baileys-auth";
 const RECONNECT_DELAY_MS = 2000;
@@ -55,6 +56,7 @@ export async function startWhatsApp() {
     if (connection === "open") {
       console.log("[OK] Conectado ao WhatsApp. Aguardando mensagens...");
       startFollowUpScheduler(sock);
+      startMeetingReminderScheduler(sock);
     }
 
     if (connection === "close") {
