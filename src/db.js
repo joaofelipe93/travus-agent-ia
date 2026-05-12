@@ -69,6 +69,7 @@ function ensureColumn(table, column, definition) {
 ensureColumn("conversations", "last_user_message_at", "INTEGER");
 ensureColumn("conversations", "followup_step", "INTEGER NOT NULL DEFAULT 0");
 ensureColumn("conversations", "disqualified", "TEXT");
+ensureColumn("conversations", "bot_enabled", "INTEGER NOT NULL DEFAULT 1");
 
 export function phoneFromJid(jid) {
   return jid.split("@")[0];
@@ -113,6 +114,7 @@ export function getConversationsNeedingFollowUp() {
       JOIN contacts ct ON ct.phone = c.phone
      WHERE c.status = 'active'
        AND c.disqualified IS NULL
+       AND c.bot_enabled = 1
        AND c.last_user_message_at IS NOT NULL
        AND c.followup_step < 5
        AND NOT EXISTS (SELECT 1 FROM leads l WHERE l.conversation_id = c.id)
@@ -160,6 +162,17 @@ export function disableFollowUps(conversationId, reason) {
   db.prepare(
     "UPDATE conversations SET disqualified = ?, updated_at = unixepoch() WHERE id = ?"
   ).run(reason, conversationId);
+}
+
+export function isBotEnabled(conversationId) {
+  const row = db.prepare("SELECT bot_enabled FROM conversations WHERE id = ?").get(conversationId);
+  return !row || row.bot_enabled === 1;
+}
+
+export function disableBot(conversationId) {
+  db.prepare(
+    "UPDATE conversations SET bot_enabled = 0, updated_at = unixepoch() WHERE id = ?"
+  ).run(conversationId);
 }
 
 export function getLeadAndJidByCelular(celular) {

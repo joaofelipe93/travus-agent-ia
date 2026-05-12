@@ -6,6 +6,8 @@ import {
   recordLeadCapture,
   phoneFromJid,
   disableFollowUps,
+  isBotEnabled,
+  disableBot,
 } from "./db.js";
 import { enviarLeadPipeRun } from "./integrations/piperun.js";
 import { createCalendarEvent } from "./integrations/calendar.js";
@@ -13,6 +15,7 @@ import { sendWithPresence } from "./whatsapp/presence.js";
 
 const LEAD_FIELDS = ["nome", "email", "celular", "renda_mensal", "data_agendamento", "hora_agendamento"];
 const SYSTEM_PREFIX_REGEX = /\[Número do WhatsApp do lead:[^\]]*\]\s*/g;
+const NEW_LEAD_TRIGGER = /formul[áa]rio/i;
 
 function processAgentResponse(text) {
   text = text.replace(SYSTEM_PREFIX_REGEX, "");
@@ -50,7 +53,20 @@ function buildAgentInput(text, jid) {
 export async function handleMessage(from, text, sock) {
   const convId = getOrStartConversation(from);
   const history = getHistory(convId);
+
+  if (history.length === 0 && !NEW_LEAD_TRIGGER.test(text)) {
+    addMessage(convId, "user", text);
+    disableBot(convId);
+    console.log(`[BOT] Lead antigo detectado (mensagem inicial sem "formulário") → ${from}. Bot silenciado pra essa conversa.`);
+    return;
+  }
+
   addMessage(convId, "user", text);
+
+  if (!isBotEnabled(convId)) {
+    console.log(`[BOT] Mensagem ignorada (conversa em modo manual) → ${from}: ${text.slice(0, 50)}`);
+    return;
+  }
 
   const resposta = await askAgent(history, buildAgentInput(text, from));
   addMessage(convId, "assistant", resposta);
