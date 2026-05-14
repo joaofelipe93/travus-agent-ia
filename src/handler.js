@@ -15,7 +15,7 @@ import { sendWithPresence } from "./whatsapp/presence.js";
 
 const LEAD_FIELDS = ["nome", "email", "celular", "renda_mensal", "data_agendamento", "hora_agendamento"];
 const SYSTEM_PREFIX_REGEX = /\[Número do WhatsApp do lead:[^\]]*\]\s*/g;
-const NEW_LEAD_TRIGGER = /formul[áa]rio/i;
+const NEW_LEAD_TRIGGER = /formul[áa]rio|garantir uma renda fixa investindo em im[óo]ve/i;
 
 function processAgentResponse(text) {
   text = text.replace(SYSTEM_PREFIX_REGEX, "");
