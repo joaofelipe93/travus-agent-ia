@@ -8,6 +8,7 @@ import { handleMessage } from "../handler.js";
 import { enqueue } from "./queue.js";
 import { startFollowUpScheduler } from "./followup.js";
 import { startMeetingReminderScheduler } from "../integrations/meeting-reminders.js";
+import { markCallAnswered } from "../db.js";
 
 const SESSION_DIR = "./.baileys-auth";
 const RECONNECT_DELAY_MS = 2000;
@@ -71,6 +72,20 @@ export async function startWhatsApp() {
 
       console.log(`[AVISO] Conexão encerrada (code=${code}, msg=${msg}). Reconectando em ${RECONNECT_DELAY_MS}ms...`);
       setTimeout(() => startWhatsApp(), RECONNECT_DELAY_MS);
+    }
+  });
+
+  sock.ev.on("call", async (calls) => {
+    for (const call of calls) {
+      console.log(`[CALL] event id=${call.id} from=${call.from} status=${call.status} video=${call.isVideo ?? false}`);
+      if (call.status === "accept" && call.from) {
+        const marked = markCallAnswered(call.from);
+        if (marked) {
+          console.log(`[CALL] Atendida → follow-ups desativados para ${call.from}`);
+        } else {
+          console.log(`[CALL] Atendida mas nenhuma conversa ativa encontrada para ${call.from}`);
+        }
+      }
     }
   });
 
