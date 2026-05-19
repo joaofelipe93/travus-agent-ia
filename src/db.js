@@ -70,6 +70,7 @@ ensureColumn("conversations", "last_user_message_at", "INTEGER");
 ensureColumn("conversations", "followup_step", "INTEGER NOT NULL DEFAULT 0");
 ensureColumn("conversations", "disqualified", "TEXT");
 ensureColumn("conversations", "bot_enabled", "INTEGER NOT NULL DEFAULT 1");
+ensureColumn("conversations", "call_answered_at", "INTEGER");
 
 export function phoneFromJid(jid) {
   return jid.split("@")[0];
@@ -115,6 +116,7 @@ export function getConversationsNeedingFollowUp() {
      WHERE c.status = 'active'
        AND c.disqualified IS NULL
        AND c.bot_enabled = 1
+       AND c.call_answered_at IS NULL
        AND c.last_user_message_at IS NOT NULL
        AND c.followup_step < 5
        AND NOT EXISTS (SELECT 1 FROM leads l WHERE l.conversation_id = c.id)
@@ -141,13 +143,14 @@ export function getConversationsNeedingFollowUp() {
 
 export function checkFollowUpStillNeeded(conversationId, step) {
   const row = db.prepare(`
-    SELECT c.followup_step, c.status, c.disqualified,
+    SELECT c.followup_step, c.status, c.disqualified, c.call_answered_at,
            NOT EXISTS (SELECT 1 FROM leads WHERE conversation_id = c.id) AS no_lead
       FROM conversations c WHERE c.id = ?
   `).get(conversationId);
   return !!row
     && row.status === "active"
     && !row.disqualified
+    && !row.call_answered_at
     && !!row.no_lead
     && row.followup_step < step;
 }
@@ -173,6 +176,20 @@ export function disableBot(conversationId) {
   db.prepare(
     "UPDATE conversations SET bot_enabled = 0, updated_at = unixepoch() WHERE id = ?"
   ).run(conversationId);
+}
+
+export function markCallAnswered(jid) {
+  const row = db.prepare(`
+    SELECT c.id FROM conversations c
+    JOIN contacts ct ON ct.phone = c.phone
+    WHERE ct.jid = ? AND c.status = 'active'
+    ORDER BY c.created_at DESC LIMIT 1
+  `).get(jid);
+  if (!row) return false;
+  db.prepare(
+    "UPDATE conversations SET call_answered_at = unixepoch(), updated_at = unixepoch() WHERE id = ?"
+  ).run(row.id);
+  return true;
 }
 
 export function getLeadAndJidByCelular(celular) {
