@@ -24,9 +24,11 @@ let intervalStarted = false;
 function getAuth() {
   const keyFile = process.env.GOOGLE_SA_KEY_FILE;
   if (!keyFile) throw new Error("GOOGLE_SA_KEY_FILE não configurado no .env");
+  const subject = process.env.GOOGLE_IMPERSONATE_USER;
   return new google.auth.GoogleAuth({
     keyFile,
     scopes: ["https://www.googleapis.com/auth/calendar.readonly"],
+    ...(subject ? { clientOptions: { subject } } : {}),
   });
 }
 
