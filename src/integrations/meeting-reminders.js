@@ -27,7 +27,7 @@ function getAuth() {
   const subject = process.env.GOOGLE_IMPERSONATE_USER;
   return new google.auth.GoogleAuth({
     keyFile,
-    scopes: ["https://www.googleapis.com/auth/calendar.readonly"],
+    scopes: ["https://www.googleapis.com/auth/calendar"],
     ...(subject ? { clientOptions: { subject } } : {}),
   });
 }
