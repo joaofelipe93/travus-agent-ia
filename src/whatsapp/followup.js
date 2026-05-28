@@ -9,10 +9,8 @@ import { enqueue } from "./queue.js";
 
 const TEMPLATES = {
   1: "Oi! Você ainda tá por aí?",
-  2: "Oi! Caso ainda tenha interesse na conversa, é só me dar um sinal por aqui.",
-  3: "Tá tudo certo aí? Sigo à disposição se quiser continuar.",
-  4: "Oi! Se preferir, podemos continuar nossa conversa em outro momento. É só me chamar.",
-  5: "Oi! Passei aqui só pra avisar que sigo à disposição se ainda tiver interesse em conversar sobre investimentos. Quando puder, me dá um retorno.",
+  2: "Tentei falar com você, mas não foi possível. Tem algum horário para nos falarmos melhor?",
+  3: "Olá, bom dia! Tudo bem?",
 };
 
 const CHECK_INTERVAL_MS = 60 * 1000;

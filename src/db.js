@@ -118,16 +118,14 @@ export function getConversationsNeedingFollowUp() {
        AND c.bot_enabled = 1
        AND c.call_answered_at IS NULL
        AND c.last_user_message_at IS NOT NULL
-       AND c.followup_step < 5
+       AND c.followup_step < 3
        AND NOT EXISTS (SELECT 1 FROM leads l WHERE l.conversation_id = c.id)
        AND (unixepoch() - c.last_user_message_at) >= 600
   `).all();
 
   const STEPS = [
-    { step: 5, seconds: 24 * 60 * 60 },
-    { step: 4, seconds: 4 * 60 * 60 },
-    { step: 3, seconds: 2 * 60 * 60 },
-    { step: 2, seconds: 30 * 60 },
+    { step: 3, seconds: 24 * 60 * 60 },
+    { step: 2, seconds: 5 * 60 * 60 },
     { step: 1, seconds: 10 * 60 },
   ];
 
