@@ -44,6 +44,32 @@ function processAgentResponse(text) {
   };
 }
 
+function normalizeCelular(input) {
+  const d = String(input ?? "").replace(/\D/g, "");
+  if (d.length === 13 && d.startsWith("55")) return d;
+  if (d.length === 11) return "55" + d;
+  if (d.length === 10) return "55" + d.slice(0, 2) + "9" + d.slice(2);
+  return d;
+}
+
+function extractCelularFromHistory(convId) {
+  const messages = getHistory(convId);
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role !== "user") continue;
+    const digits = m.content.replace(/\D/g, "");
+    if (digits.length >= 10 && digits.length <= 13) return normalizeCelular(digits);
+  }
+  return null;
+}
+
+function resolveLeadCelular(lead, convId, jid) {
+  if (jid?.endsWith("@s.whatsapp.net")) return phoneFromJid(jid);
+  const fromHistory = extractCelularFromHistory(convId);
+  if (fromHistory) return fromHistory;
+  return normalizeCelular(lead.celular);
+}
+
 function buildAgentInput(text, jid) {
   if (!jid?.endsWith("@s.whatsapp.net")) return text;
   const phone = phoneFromJid(jid);
@@ -84,6 +110,11 @@ export async function handleMessage(from, text, sock) {
   }
 
   if (lead) {
+    const resolvedCelular = resolveLeadCelular(lead, convId, from);
+    if (resolvedCelular && resolvedCelular !== lead.celular) {
+      console.log(`[LEAD] celular do agente "${lead.celular}" corrigido para "${resolvedCelular}" (extraído do histórico/JID)`);
+      lead.celular = resolvedCelular;
+    }
     try {
       recordLeadCapture(convId, lead);
       console.log(`[LEAD] capturado localmente: ${lead.nome} | ${lead.celular}`);
