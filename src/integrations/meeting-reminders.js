@@ -2,6 +2,7 @@ import { google } from "googleapis";
 import {
   getLeadAndJidByCelular,
   hasReminderBeenSent,
+  hasAnyReminderSent,
   recordReminderSent,
   getReminderSentAt,
   hasUserMessageAfter,
@@ -62,6 +63,10 @@ function brasiliaHour(date) {
   return parseInt(date.toLocaleString("en-GB", { timeZone: TZ, hour: "2-digit", hourCycle: "h23" }), 10);
 }
 
+function isSameBrasiliaDay(a, b) {
+  return a.toLocaleDateString("en-CA", { timeZone: TZ }) === b.toLocaleDateString("en-CA", { timeZone: TZ });
+}
+
 function reminderSchedule(meetingStart) {
   const meetingParts = brasiliaDateParts(meetingStart);
   const dayBeforeParts = dayBefore(meetingParts);
@@ -76,9 +81,11 @@ function reminderSchedule(meetingStart) {
   };
 }
 
-function buildTemplate(type, nome, hora, meetLink) {
+function buildTemplate(type, nome, hora, meetLink, when) {
   const n = nome || "";
   switch (type) {
+    case "immediate":
+      return `Olá ${n}! Tô confirmando nossa reunião ${when} às ${hora} ☺️\n\nLink do Meet: ${meetLink}`;
     case "d1_morning":
       return `Olá ${n}, bom dia! Tudo bom? Já estamos com tudo pronto para amanhã às ${hora} te apresentar ☺️. Tenha um ótimo dia!`;
     case "d1_afternoon":
@@ -149,6 +156,31 @@ async function runReminders() {
     const hora = formatHora(startTime);
     const jid = lead.jid;
     const nome = firstName(lead.nome);
+
+    // Immediate: evento criado em cima da hora (depois de toda a janela do d1_morning)
+    // e ainda falta tempo suficiente até o início. Garante uma confirmação imediata.
+    const d1MorningCfg = schedule.d1_morning;
+    const d1MorningWindowEnd = d1MorningCfg.target.getTime() + d1MorningCfg.windowMin * 60000;
+    const timeToEventMin = (startTime.getTime() - nowMs) / 60000;
+    if (
+      nowMs > d1MorningWindowEnd &&
+      timeToEventMin > 30 &&
+      !hasAnyReminderSent(event.id)
+    ) {
+      const when = isSameBrasiliaDay(startTime, new Date(nowMs)) ? "hoje" : "amanhã";
+      const message = buildTemplate("immediate", nome, hora, event.hangoutLink, when);
+      enqueue(jid, async () => {
+        if (hasAnyReminderSent(event.id)) return;
+        try {
+          await sendWithPresence(currentSock, jid, message);
+          recordReminderSent(event.id, "immediate");
+          console.log(`[REMINDER] immediate → ${jid} (event=${event.id}, when=${when})`);
+        } catch (err) {
+          console.error(`[REMINDER] erro ao enviar immediate para ${jid}: ${err?.message ?? err}`);
+        }
+      });
+      continue;
+    }
 
     for (const [type, cfg] of Object.entries(schedule)) {
       if (cfg.skipIf) continue;
