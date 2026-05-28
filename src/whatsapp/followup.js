@@ -7,11 +7,24 @@ import {
 import { sendWithPresence } from "./presence.js";
 import { enqueue } from "./queue.js";
 
-const TEMPLATES = {
-  1: "Oi! Você ainda tá por aí?",
-  2: "Tentei falar com você, mas não foi possível. Tem algum horário para nos falarmos melhor?",
-  3: "Olá, bom dia! Tudo bem?",
-};
+function saudacaoBrasilia() {
+  const hh = new Date().toLocaleString("en-GB", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    hourCycle: "h23",
+  });
+  const h = parseInt(hh, 10);
+  if (h >= 4 && h <= 11) return "bom dia";
+  if (h >= 12 && h <= 17) return "boa tarde";
+  return "boa noite";
+}
+
+function templateFor(step) {
+  if (step === 1) return "Oi! Você ainda tá por aí?";
+  if (step === 2) return "Tentei falar com você, mas não foi possível. Tem algum horário para nos falarmos melhor?";
+  if (step === 3) return `Olá, ${saudacaoBrasilia()}! Tudo bem?`;
+  return null;
+}
 
 const CHECK_INTERVAL_MS = 60 * 1000;
 
@@ -40,7 +53,7 @@ async function runFollowUps() {
   for (const { conversation_id, jid, step } of pending) {
     enqueue(jid, async () => {
       if (!checkFollowUpStillNeeded(conversation_id, step)) return;
-      const text = TEMPLATES[step];
+      const text = templateFor(step);
       if (!text) return;
       try {
         await sendWithPresence(currentSock, jid, text);
