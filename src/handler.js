@@ -85,8 +85,13 @@ export async function handleMessage(from, text, sock) {
 
   if (lead) {
     try {
-      await enviarLeadPipeRun(lead);
       recordLeadCapture(convId, lead);
+      console.log(`[LEAD] capturado localmente: ${lead.nome} | ${lead.celular}`);
+    } catch (dbErr) {
+      console.error(`[LEAD] Erro ao gravar lead local: ${dbErr?.message ?? dbErr}`);
+    }
+    try {
+      await enviarLeadPipeRun(lead);
       console.log(`[CRM] Lead enviado para Piperun: ${lead.nome} | ${lead.celular}`);
     } catch (crmErr) {
       console.error(`[CRM] Erro ao enviar para Piperun: ${crmErr?.message ?? crmErr}`);
