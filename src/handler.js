@@ -44,12 +44,19 @@ function processAgentResponse(text) {
   };
 }
 
+const PLACEHOLDER_PHONES = new Set(["5511999999999", "5511991234567"]);
+
 function normalizeCelular(input) {
   const d = String(input ?? "").replace(/\D/g, "");
   if (d.length === 13 && d.startsWith("55")) return d;
   if (d.length === 11) return "55" + d;
   if (d.length === 10) return "55" + d.slice(0, 2) + "9" + d.slice(2);
   return d;
+}
+
+function isPlaceholderPhone(celular) {
+  const d = String(celular ?? "").replace(/\D/g, "");
+  return PLACEHOLDER_PHONES.has(d);
 }
 
 function extractCelularFromHistory(convId) {
@@ -66,8 +73,11 @@ function extractCelularFromHistory(convId) {
 function resolveLeadCelular(lead, convId, jid) {
   if (jid?.endsWith("@s.whatsapp.net")) return phoneFromJid(jid);
   const fromHistory = extractCelularFromHistory(convId);
-  if (fromHistory) return fromHistory;
-  return normalizeCelular(lead.celular);
+  if (fromHistory && !isPlaceholderPhone(fromHistory)) return fromHistory;
+  const normalized = normalizeCelular(lead.celular);
+  if (isPlaceholderPhone(normalized)) return null;
+  if (normalized.length < 12 || normalized.length > 13) return null;
+  return normalized;
 }
 
 function buildAgentInput(text, jid) {
@@ -99,6 +109,23 @@ export async function handleMessage(from, text, sock) {
 
   const { cleanText, lead, closeReason } = processAgentResponse(resposta);
 
+  // Resolve celular antes de qualquer envio: se for inválido / placeholder, pede o número.
+  let resolvedCelular = null;
+  if (lead) {
+    resolvedCelular = resolveLeadCelular(lead, convId, from);
+    if (!resolvedCelular) {
+      console.error(`[LEAD] celular inválido/ausente (agente: "${lead.celular}") → pedindo número ao lead, não capturando lead ainda.`);
+      const recovery = "Antes de finalizar, qual o melhor número pra eu te ligar? 😊";
+      await sendWithPresence(sock, from, recovery);
+      addMessage(convId, "assistant", recovery);
+      return;
+    }
+    if (resolvedCelular !== lead.celular) {
+      console.log(`[LEAD] celular do agente "${lead.celular}" corrigido para "${resolvedCelular}" (extraído do histórico/JID)`);
+      lead.celular = resolvedCelular;
+    }
+  }
+
   if (cleanText) {
     await sendWithPresence(sock, from, cleanText);
     console.log(`[AGENTE] → ${from}: ${cleanText.slice(0, 80)}${cleanText.length > 80 ? "…" : ""}`);
@@ -110,11 +137,6 @@ export async function handleMessage(from, text, sock) {
   }
 
   if (lead) {
-    const resolvedCelular = resolveLeadCelular(lead, convId, from);
-    if (resolvedCelular && resolvedCelular !== lead.celular) {
-      console.log(`[LEAD] celular do agente "${lead.celular}" corrigido para "${resolvedCelular}" (extraído do histórico/JID)`);
-      lead.celular = resolvedCelular;
-    }
     try {
       recordLeadCapture(convId, lead);
       console.log(`[LEAD] capturado localmente: ${lead.nome} | ${lead.celular}`);
