@@ -208,6 +208,13 @@ export function hasReminderBeenSent(eventId, reminderType) {
   return !!row;
 }
 
+export function hasAnyReminderSent(eventId) {
+  const row = db.prepare(
+    "SELECT 1 FROM meeting_reminders WHERE event_id = ? LIMIT 1"
+  ).get(eventId);
+  return !!row;
+}
+
 export function recordReminderSent(eventId, reminderType) {
   db.prepare(
     "INSERT OR IGNORE INTO meeting_reminders (event_id, reminder_type) VALUES (?, ?)"
