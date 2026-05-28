@@ -84,8 +84,10 @@ function reminderSchedule(meetingStart) {
 function buildTemplate(type, nome, hora, meetLink, when) {
   const n = nome || "";
   switch (type) {
-    case "immediate":
-      return `Olá ${n}! Tô confirmando nossa reunião ${when} às ${hora} ☺️\n\nLink do Meet: ${meetLink}`;
+    case "immediate": {
+      const despedida = when === "hoje" ? "Até logo!" : "Até amanhã!";
+      return `Olá, ${n}! Tô confirmando nossa call ${when} às ${hora} ☺️\n\nSegue o Link do Meet: ${meetLink}\n\n${despedida}`;
+    }
     case "d1_morning":
       return `Olá ${n}, bom dia! Tudo bom? Já estamos com tudo pronto para amanhã às ${hora} te apresentar ☺️. Tenha um ótimo dia!`;
     case "d1_afternoon":
