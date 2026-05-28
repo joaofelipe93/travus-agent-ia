@@ -214,6 +214,25 @@ export function recordReminderSent(eventId, reminderType) {
   ).run(eventId, reminderType);
 }
 
+export function getReminderSentAt(eventId, reminderType) {
+  const row = db.prepare(
+    "SELECT sent_at FROM meeting_reminders WHERE event_id = ? AND reminder_type = ?"
+  ).get(eventId, reminderType);
+  return row?.sent_at ?? null;
+}
+
+export function hasUserMessageAfter(jid, timestampUnix) {
+  const row = db.prepare(`
+    SELECT 1
+      FROM messages m
+      JOIN conversations c ON c.id = m.conversation_id
+      JOIN contacts ct ON ct.phone = c.phone
+     WHERE ct.jid = ? AND m.role = 'user' AND m.created_at > ?
+     LIMIT 1
+  `).get(jid, timestampUnix);
+  return !!row;
+}
+
 export function recordLeadCapture(conversationId, leadData) {
   const { phone } = db.prepare("SELECT phone FROM conversations WHERE id = ?").get(conversationId);
 
