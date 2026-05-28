@@ -14,9 +14,9 @@ function saudacaoBrasilia() {
     hourCycle: "h23",
   });
   const h = parseInt(hh, 10);
-  if (h >= 4 && h <= 11) return "bom dia";
-  if (h >= 12 && h <= 17) return "boa tarde";
-  return "boa noite";
+  if (h >= 4 && h <= 11) return "Bom dia";
+  if (h >= 12 && h <= 17) return "Boa tarde";
+  return "Boa noite";
 }
 
 function templateFor(step) {
