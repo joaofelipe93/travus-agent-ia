@@ -1,4 +1,5 @@
 import { google } from "googleapis";
+import { calendarRequestsTotal } from "../metrics.js";
 
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID ?? "primary";
 const TIMEZONE = "America/Sao_Paulo";
@@ -39,6 +40,12 @@ export async function createCalendarEvent({ nome, email, celular, renda_mensal, 
     end: { dateTime: `${data_agendamento}T${endH}:${endM}:00`, timeZone: TIMEZONE },
   };
 
-  const res = await calendar.events.insert({ calendarId: CALENDAR_ID, resource: event, sendUpdates: "none" });
-  return res.data;
+  try {
+    const res = await calendar.events.insert({ calendarId: CALENDAR_ID, resource: event, sendUpdates: "none" });
+    calendarRequestsTotal.inc({ operation: "insert", status: "ok" });
+    return res.data;
+  } catch (err) {
+    calendarRequestsTotal.inc({ operation: "insert", status: "error" });
+    throw err;
+  }
 }
