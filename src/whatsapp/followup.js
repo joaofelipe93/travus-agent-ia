@@ -50,9 +50,9 @@ async function runFollowUps() {
     return;
   }
 
-  for (const { conversation_id, jid, step } of pending) {
+  for (const { conversation_id, jid, step, snapshot_at } of pending) {
     enqueue(jid, async () => {
-      if (!checkFollowUpStillNeeded(conversation_id, step)) return;
+      if (!checkFollowUpStillNeeded(conversation_id, step, snapshot_at)) return;
       const text = templateFor(step);
       if (!text) return;
       try {
