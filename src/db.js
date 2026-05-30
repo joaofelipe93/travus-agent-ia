@@ -57,6 +57,12 @@ db.exec(`
     sent_at       INTEGER NOT NULL DEFAULT (unixepoch()),
     UNIQUE(event_id, reminder_type)
   );
+
+  CREATE TABLE IF NOT EXISTS processed_messages (
+    message_id   TEXT    PRIMARY KEY,
+    processed_at INTEGER NOT NULL DEFAULT (unixepoch())
+  );
+  CREATE INDEX IF NOT EXISTS idx_processed_at ON processed_messages(processed_at);
 `);
 
 function ensureColumn(table, column, definition) {
@@ -253,6 +259,19 @@ export function hasUserMessageAfter(jid, timestampUnix) {
      LIMIT 1
   `).get(jid, timestampUnix);
   return !!row;
+}
+
+export function markMessageProcessed(messageId) {
+  const result = db.prepare(
+    "INSERT OR IGNORE INTO processed_messages (message_id) VALUES (?)"
+  ).run(messageId);
+  return result.changes > 0;
+}
+
+export function pruneProcessedMessages(olderThanSeconds = 7 * 24 * 60 * 60) {
+  db.prepare(
+    "DELETE FROM processed_messages WHERE processed_at < unixepoch() - ?"
+  ).run(olderThanSeconds);
 }
 
 export function recordLeadCapture(conversationId, leadData) {
