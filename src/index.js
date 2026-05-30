@@ -1,9 +1,6 @@
 import "dotenv/config";
 import { startWhatsApp } from "./whatsapp/index.js";
-import { startHttpServer } from "./http-server.js";
-import { logger } from "./logger.js";
 
-logger.info({ event: "boot.start" });
+console.log("Iniciando bot WhatsApp ↔ Agente DigitalOcean...");
 
-startHttpServer();
 await startWhatsApp();

@@ -9,8 +9,6 @@ import {
 } from "../db.js";
 import { sendWithPresence } from "../whatsapp/presence.js";
 import { enqueue } from "../whatsapp/queue.js";
-import { logger } from "../logger.js";
-import { remindersSentTotal, messagesOutTotal, calendarRequestsTotal } from "../metrics.js";
 
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID ?? "primary";
 const POLL_INTERVAL_MS = 2 * 60 * 1000;
@@ -110,7 +108,7 @@ export function startMeetingReminderScheduler(sock) {
   if (intervalStarted) return;
   intervalStarted = true;
   setInterval(runReminders, POLL_INTERVAL_MS);
-  logger.info({ event: "reminder.scheduler_started", interval_ms: POLL_INTERVAL_MS });
+  console.log("[REMINDER] scheduler de reuniões iniciado (poll cada 2min)");
 }
 
 async function runReminders() {
@@ -129,11 +127,9 @@ async function runReminders() {
       singleEvents: true,
       orderBy: "startTime",
     });
-    calendarRequestsTotal.inc({ operation: "list", status: "ok" });
     events = res.data.items ?? [];
   } catch (err) {
-    calendarRequestsTotal.inc({ operation: "list", status: "error" });
-    logger.error({ event: "reminder.calendar_query_failed", err: err?.message ?? String(err) });
+    console.error(`[REMINDER] erro ao consultar Calendar: ${err?.message ?? err}`);
     return;
   }
 
@@ -146,14 +142,14 @@ async function runReminders() {
     const text = `${event.summary ?? ""} ${event.description ?? ""}`;
     const match = text.match(PHONE_REGEX);
     if (!match) {
-      logger.warn({ event: "reminder.event_without_phone", event_id: event.id, summary: event.summary ?? null });
+      console.warn(`[REMINDER] aviso: evento com Meet sem WhatsApp identificável: "${event.summary ?? "(sem título)"}" (id=${event.id})`);
       continue;
     }
 
     const celular = match[1];
     const lead = getLeadAndJidByCelular(celular);
     if (!lead) {
-      logger.warn({ event: "reminder.phone_no_lead", event_id: event.id, celular, summary: event.summary ?? null });
+      console.warn(`[REMINDER] aviso: telefone ${celular} no evento "${event.summary}" não corresponde a nenhum lead`);
       continue;
     }
 
@@ -180,11 +176,9 @@ async function runReminders() {
         try {
           await sendWithPresence(currentSock, jid, message);
           recordReminderSent(event.id, "immediate");
-          remindersSentTotal.inc({ type: "immediate" });
-          messagesOutTotal.inc({ kind: "reminder" });
-          logger.info({ event: "reminder.sent", type: "immediate", jid, event_id: event.id, when });
+          console.log(`[REMINDER] immediate → ${jid} (event=${event.id}, when=${when})`);
         } catch (err) {
-          logger.error({ event: "reminder.send_failed", type: "immediate", jid, event_id: event.id, err: err?.message ?? String(err) });
+          console.error(`[REMINDER] erro ao enviar immediate para ${jid}: ${err?.message ?? err}`);
         }
       });
       continue;
@@ -215,11 +209,9 @@ async function runReminders() {
         try {
           await sendWithPresence(currentSock, jid, message);
           recordReminderSent(event.id, type);
-          remindersSentTotal.inc({ type });
-          messagesOutTotal.inc({ kind: "reminder" });
-          logger.info({ event: "reminder.sent", type, jid, event_id: event.id });
+          console.log(`[REMINDER] ${type} → ${jid} (event=${event.id})`);
         } catch (err) {
-          logger.error({ event: "reminder.send_failed", type, jid, event_id: event.id, err: err?.message ?? String(err) });
+          console.error(`[REMINDER] erro ao enviar ${type} para ${jid}: ${err?.message ?? err}`);
         }
       });
     }

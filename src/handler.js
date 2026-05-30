@@ -12,12 +12,6 @@ import {
 import { enviarLeadPipeRun } from "./integrations/piperun.js";
 import { createCalendarEvent } from "./integrations/calendar.js";
 import { sendWithPresence } from "./whatsapp/presence.js";
-import { withContext } from "./logger.js";
-import {
-  leadsCapturedTotal,
-  leadsRejectedTotal,
-  messagesOutTotal,
-} from "./metrics.js";
 
 const LEAD_FIELDS = ["nome", "email", "celular", "renda_mensal", "data_agendamento", "hora_agendamento"];
 const SYSTEM_PREFIX_REGEX = /\[Número do WhatsApp do lead:[^\]]*\]\s*/g;
@@ -94,20 +88,19 @@ function buildAgentInput(text, jid) {
 
 export async function handleMessage(from, text, sock) {
   const convId = getOrStartConversation(from);
-  const log = withContext({ jid: from, conv_id: convId });
   const history = getHistory(convId);
 
   if (history.length === 0 && !NEW_LEAD_TRIGGER.test(text)) {
     addMessage(convId, "user", text);
     disableBot(convId);
-    log.info({ event: "bot.silenced", reason: "old_lead_no_trigger" });
+    console.log(`[BOT] Lead antigo detectado (mensagem inicial sem "formulário") → ${from}. Bot silenciado pra essa conversa.`);
     return;
   }
 
   addMessage(convId, "user", text);
 
   if (!isBotEnabled(convId)) {
-    log.debug({ event: "bot.message_ignored", reason: "manual_mode", preview: text.slice(0, 50) });
+    console.log(`[BOT] Mensagem ignorada (conversa em modo manual) → ${from}: ${text.slice(0, 50)}`);
     return;
   }
 
@@ -116,55 +109,51 @@ export async function handleMessage(from, text, sock) {
 
   const { cleanText, lead, closeReason } = processAgentResponse(resposta);
 
+  // Resolve celular antes de qualquer envio: se for inválido / placeholder, pede o número.
   let resolvedCelular = null;
   if (lead) {
     resolvedCelular = resolveLeadCelular(lead, convId, from);
     if (!resolvedCelular) {
-      leadsRejectedTotal.inc({ reason: "invalid_phone" });
-      log.warn({ event: "lead.rejected", reason: "invalid_phone", agent_celular: lead.celular });
+      console.error(`[LEAD] celular inválido/ausente (agente: "${lead.celular}") → pedindo número ao lead, não capturando lead ainda.`);
       const recovery = "Antes de finalizar, qual o melhor número pra eu te ligar? 😊";
       await sendWithPresence(sock, from, recovery);
-      messagesOutTotal.inc({ kind: "recovery" });
       addMessage(convId, "assistant", recovery);
-      log.info({ event: "lead.recovery_sent" });
       return;
     }
     if (resolvedCelular !== lead.celular) {
-      log.info({ event: "lead.celular_corrected", agent_celular: lead.celular, resolved: resolvedCelular });
+      console.log(`[LEAD] celular do agente "${lead.celular}" corrigido para "${resolvedCelular}" (extraído do histórico/JID)`);
       lead.celular = resolvedCelular;
     }
   }
 
   if (cleanText) {
     await sendWithPresence(sock, from, cleanText);
-    messagesOutTotal.inc({ kind: "agent" });
-    log.info({ event: "agent.reply_sent", preview: cleanText.slice(0, 80) });
+    console.log(`[AGENTE] → ${from}: ${cleanText.slice(0, 80)}${cleanText.length > 80 ? "…" : ""}`);
   }
 
   if (closeReason) {
     disableFollowUps(convId, closeReason);
-    log.info({ event: "conversation.followups_disabled", reason: closeReason });
+    console.log(`[CONVERSA] follow-ups desativados (motivo: ${closeReason}) → ${from} (histórico mantido)`);
   }
 
   if (lead) {
     try {
       recordLeadCapture(convId, lead);
-      leadsCapturedTotal.inc();
-      log.info({ event: "lead.captured", nome: lead.nome, celular: lead.celular });
+      console.log(`[LEAD] capturado localmente: ${lead.nome} | ${lead.celular}`);
     } catch (dbErr) {
-      log.error({ event: "lead.persist_failed", err: dbErr?.message ?? String(dbErr) });
+      console.error(`[LEAD] Erro ao gravar lead local: ${dbErr?.message ?? dbErr}`);
     }
     try {
       await enviarLeadPipeRun(lead);
-      log.info({ event: "piperun.sent", nome: lead.nome, celular: lead.celular });
+      console.log(`[CRM] Lead enviado para Piperun: ${lead.nome} | ${lead.celular}`);
     } catch (crmErr) {
-      log.error({ event: "piperun.failed", err: crmErr?.message ?? String(crmErr) });
+      console.error(`[CRM] Erro ao enviar para Piperun: ${crmErr?.message ?? crmErr}`);
     }
     try {
       const evento = await createCalendarEvent(lead);
-      if (evento) log.info({ event: "calendar.created", url: evento.htmlLink });
+      if (evento) console.log(`[CALENDAR] Evento criado: ${evento.htmlLink}`);
     } catch (calErr) {
-      log.error({ event: "calendar.failed", err: calErr?.message ?? String(calErr) });
+      console.error(`[CALENDAR] Erro ao criar evento: ${calErr?.message ?? calErr}`);
     }
   }
 }

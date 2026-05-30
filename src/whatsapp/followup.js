@@ -6,8 +6,6 @@ import {
 } from "../db.js";
 import { sendWithPresence } from "./presence.js";
 import { enqueue } from "./queue.js";
-import { logger } from "../logger.js";
-import { followupsSentTotal, messagesOutTotal } from "../metrics.js";
 
 function saudacaoBrasilia() {
   const hh = new Date().toLocaleString("en-GB", {
@@ -38,7 +36,7 @@ export function startFollowUpScheduler(sock) {
   if (intervalStarted) return;
   intervalStarted = true;
   setInterval(runFollowUps, CHECK_INTERVAL_MS);
-  logger.info({ event: "followup.scheduler_started", interval_ms: CHECK_INTERVAL_MS });
+  console.log("[FOLLOWUP] scheduler iniciado (checa a cada 60s)");
 }
 
 async function runFollowUps() {
@@ -48,7 +46,7 @@ async function runFollowUps() {
   try {
     pending = getConversationsNeedingFollowUp();
   } catch (err) {
-    logger.error({ event: "followup.query_failed", err: err?.message ?? String(err) });
+    console.error(`[FOLLOWUP] erro ao consultar pendentes: ${err?.message ?? err}`);
     return;
   }
 
@@ -61,11 +59,9 @@ async function runFollowUps() {
         await sendWithPresence(currentSock, jid, text);
         addMessage(conversation_id, "assistant", text);
         markFollowUpSent(conversation_id, step);
-        followupsSentTotal.inc({ step: String(step) });
-        messagesOutTotal.inc({ kind: "followup" });
-        logger.info({ event: "followup.sent", jid, conv_id: conversation_id, step });
+        console.log(`[FOLLOWUP] step=${step} → ${jid}`);
       } catch (err) {
-        logger.error({ event: "followup.send_failed", jid, conv_id: conversation_id, step, err: err?.message ?? String(err) });
+        console.error(`[FOLLOWUP] erro ao enviar step=${step} para ${jid}: ${err?.message ?? err}`);
       }
     });
   }
