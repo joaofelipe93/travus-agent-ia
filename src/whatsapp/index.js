@@ -8,7 +8,7 @@ import { handleMessage } from "../handler.js";
 import { enqueue } from "./queue.js";
 import { startFollowUpScheduler } from "./followup.js";
 import { startMeetingReminderScheduler } from "../integrations/meeting-reminders.js";
-import { markCallAnswered } from "../db.js";
+import { markCallAnswered, markMessageProcessed, pruneProcessedMessages } from "../db.js";
 
 const SESSION_DIR = "./.baileys-auth";
 const RECONNECT_DELAY_MS = 2000;
@@ -58,6 +58,7 @@ export async function startWhatsApp() {
       console.log("[OK] Conectado ao WhatsApp. Aguardando mensagens...");
       startFollowUpScheduler(sock);
       startMeetingReminderScheduler(sock);
+      try { pruneProcessedMessages(); } catch {}
     }
 
     if (connection === "close") {
@@ -94,6 +95,12 @@ export async function startWhatsApp() {
 
     for (const msg of messages) {
       if (!msg.message || msg.key.fromMe) continue;
+
+      const messageId = msg.key.id;
+      if (messageId && !markMessageProcessed(messageId)) {
+        console.log(`[DUP] mensagem ${messageId} já processada, ignorando reentrega.`);
+        continue;
+      }
 
       const from = msg.key.remoteJid;
 
