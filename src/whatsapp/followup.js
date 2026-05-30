@@ -30,6 +30,7 @@ const CHECK_INTERVAL_MS = 60 * 1000;
 
 let currentSock = null;
 let intervalStarted = false;
+let isRunning = false;
 
 export function startFollowUpScheduler(sock) {
   currentSock = sock;
@@ -41,7 +42,20 @@ export function startFollowUpScheduler(sock) {
 
 async function runFollowUps() {
   if (!currentSock) return;
+  if (isRunning) {
+    console.warn("[FOLLOWUP] execução anterior ainda em andamento, pulando este tick");
+    return;
+  }
+  isRunning = true;
 
+  try {
+    await runFollowUpsBody();
+  } finally {
+    isRunning = false;
+  }
+}
+
+async function runFollowUpsBody() {
   let pending;
   try {
     pending = getConversationsNeedingFollowUp();

@@ -18,6 +18,7 @@ const TZ = "America/Sao_Paulo";
 
 let currentSock = null;
 let intervalStarted = false;
+let isRunning = false;
 
 function getAuth() {
   const keyFile = process.env.GOOGLE_SA_KEY_FILE;
@@ -113,7 +114,19 @@ export function startMeetingReminderScheduler(sock) {
 
 async function runReminders() {
   if (!currentSock) return;
+  if (isRunning) {
+    console.warn("[REMINDER] execução anterior ainda em andamento, pulando este tick");
+    return;
+  }
+  isRunning = true;
+  try {
+    await runRemindersBody();
+  } finally {
+    isRunning = false;
+  }
+}
 
+async function runRemindersBody() {
   let events;
   try {
     const auth = getAuth();
