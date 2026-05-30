@@ -110,6 +110,7 @@ export function addMessage(conversationId, role, content) {
 export function getConversationsNeedingFollowUp() {
   const rows = db.prepare(`
     SELECT c.id AS conversation_id, ct.jid, c.followup_step,
+           c.last_user_message_at AS snapshot_at,
            (unixepoch() - c.last_user_message_at) AS elapsed
       FROM conversations c
       JOIN contacts ct ON ct.phone = c.phone
@@ -132,21 +133,27 @@ export function getConversationsNeedingFollowUp() {
   return rows.flatMap((r) => {
     for (const { step, seconds } of STEPS) {
       if (r.elapsed >= seconds && r.followup_step < step) {
-        return [{ conversation_id: r.conversation_id, jid: r.jid, step }];
+        return [{
+          conversation_id: r.conversation_id,
+          jid: r.jid,
+          step,
+          snapshot_at: r.snapshot_at,
+        }];
       }
     }
     return [];
   });
 }
 
-export function checkFollowUpStillNeeded(conversationId, step) {
+export function checkFollowUpStillNeeded(conversationId, step, snapshotAt = null) {
   const row = db.prepare(`
-    SELECT c.followup_step, c.status, c.disqualified, c.call_answered_at,
+    SELECT c.followup_step, c.status, c.disqualified, c.call_answered_at, c.last_user_message_at,
            NOT EXISTS (SELECT 1 FROM leads WHERE conversation_id = c.id) AS no_lead
       FROM conversations c WHERE c.id = ?
   `).get(conversationId);
-  return !!row
-    && row.status === "active"
+  if (!row) return false;
+  if (snapshotAt !== null && row.last_user_message_at !== snapshotAt) return false;
+  return row.status === "active"
     && !row.disqualified
     && !row.call_answered_at
     && !!row.no_lead
