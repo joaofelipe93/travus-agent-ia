@@ -72,6 +72,15 @@ ensureColumn("conversations", "disqualified", "TEXT");
 ensureColumn("conversations", "bot_enabled", "INTEGER NOT NULL DEFAULT 1");
 ensureColumn("conversations", "call_answered_at", "INTEGER");
 
+export function pingDb() {
+  try {
+    db.prepare("SELECT 1").get();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function phoneFromJid(jid) {
   return jid.split("@")[0];
 }

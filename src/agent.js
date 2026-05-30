@@ -1,4 +1,6 @@
 import OpenAI from "openai";
+import { logger } from "./logger.js";
+import { agentRequestsTotal, agentRequestDuration } from "./metrics.js";
 
 const { AGENTENDPOINT, SECRETKEYAGENT } = process.env;
 
@@ -32,10 +34,20 @@ export async function askAgent(history, userMessage, _client = client) {
     { role: "user", content: messageWithContext },
   ];
 
-  const response = await _client.chat.completions.create({
-    model: "n/a",
-    messages,
-  });
-
-  return response.choices[0]?.message?.content ?? "";
+  const endTimer = agentRequestDuration.startTimer();
+  try {
+    const response = await _client.chat.completions.create({
+      model: "n/a",
+      messages,
+    });
+    const duration_s = endTimer();
+    agentRequestsTotal.inc({ status: "ok" });
+    logger.debug({ event: "agent.call", status: "ok", duration_s, history_len: history.length });
+    return response.choices[0]?.message?.content ?? "";
+  } catch (err) {
+    endTimer();
+    agentRequestsTotal.inc({ status: "error" });
+    logger.error({ event: "agent.call", status: "error", err: err?.message ?? String(err) });
+    throw err;
+  }
 }

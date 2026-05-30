@@ -1,3 +1,5 @@
+import { piperunRequestsTotal, piperunRequestDuration } from "../metrics.js";
+
 const ENDPOINT = `https://app.pipe.run/webservice/integradorJson?hash=${process.env.PIPERUN_HASH}`;
 
 export async function enviarLeadPipeRun({ nome, email, celular, renda_mensal, data_agendamento, hora_agendamento }) {
@@ -25,17 +27,28 @@ export async function enviarLeadPipeRun({ nome, email, celular, renda_mensal, da
     ],
   };
 
-  const res = await fetch(ENDPOINT, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const endTimer = piperunRequestDuration.startTimer();
+  let res;
+  try {
+    res = await fetch(ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    endTimer();
+    piperunRequestsTotal.inc({ status: "network_error" });
+    throw err;
+  }
+  endTimer();
 
   if (!res.ok) {
+    piperunRequestsTotal.inc({ status: `http_${res.status}` });
     const responseBody = await res.text().catch(() => "(corpo da resposta ilegível)");
     throw new Error(
       `Piperun respondeu com HTTP ${res.status}. Payload enviado: ${JSON.stringify(body)}. Resposta: ${responseBody.slice(0, 500)}`
     );
   }
+  piperunRequestsTotal.inc({ status: "ok" });
   return res.json();
 }

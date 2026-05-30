@@ -9,6 +9,8 @@ import { enqueue } from "./queue.js";
 import { startFollowUpScheduler } from "./followup.js";
 import { startMeetingReminderScheduler } from "../integrations/meeting-reminders.js";
 import { markCallAnswered } from "../db.js";
+import { logger } from "../logger.js";
+import { whatsappConnected, messagesInTotal } from "../metrics.js";
 
 const SESSION_DIR = "./.baileys-auth";
 const RECONNECT_DELAY_MS = 2000;
@@ -31,9 +33,9 @@ export async function startWhatsApp() {
   try {
     const info = await fetchLatestBaileysVersion();
     version = info.version;
-    console.log(`[INFO] WhatsApp Web protocolo v${version.join(".")} (latest=${info.isLatest})`);
+    logger.info({ event: "whatsapp.protocol_version", version: version.join("."), latest: info.isLatest });
   } catch {
-    console.log("[AVISO] Falha ao buscar versão mais recente do WhatsApp Web; usando padrão do Baileys.");
+    logger.warn({ event: "whatsapp.protocol_version_fallback" });
   }
 
   const sock = makeWASocket({
@@ -49,42 +51,40 @@ export async function startWhatsApp() {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      console.log("\n[QR] Escaneie o código abaixo no WhatsApp do seu celular:");
-      console.log("     WhatsApp → Configurações → Aparelhos conectados → Conectar um aparelho\n");
+      logger.info({ event: "whatsapp.qr" });
+      console.log("\nEscaneie: WhatsApp → Configurações → Aparelhos conectados → Conectar um aparelho\n");
       qrcode.generate(qr, { small: true });
     }
 
     if (connection === "open") {
-      console.log("[OK] Conectado ao WhatsApp. Aguardando mensagens...");
+      whatsappConnected.set(1);
+      logger.info({ event: "whatsapp.connected" });
       startFollowUpScheduler(sock);
       startMeetingReminderScheduler(sock);
     }
 
     if (connection === "close") {
+      whatsappConnected.set(0);
       const code = lastDisconnect?.error?.output?.statusCode;
       const msg = lastDisconnect?.error?.message ?? "?";
       const loggedOut = code === DisconnectReason.loggedOut;
 
       if (loggedOut) {
-        console.log("[ERRO] Sessão deslogada. Apague a pasta .baileys-auth/ e rode novamente para reescanear o QR.");
+        logger.fatal({ event: "whatsapp.logged_out" });
         process.exit(1);
       }
 
-      console.log(`[AVISO] Conexão encerrada (code=${code}, msg=${msg}). Reconectando em ${RECONNECT_DELAY_MS}ms...`);
+      logger.warn({ event: "whatsapp.disconnected", code, err: msg, reconnect_in_ms: RECONNECT_DELAY_MS });
       setTimeout(() => startWhatsApp(), RECONNECT_DELAY_MS);
     }
   });
 
   sock.ev.on("call", async (calls) => {
     for (const call of calls) {
-      console.log(`[CALL] event id=${call.id} from=${call.from} status=${call.status} video=${call.isVideo ?? false}`);
+      logger.debug({ event: "call.event", call_id: call.id, from: call.from, status: call.status, video: call.isVideo ?? false });
       if (call.status === "accept" && call.from) {
         const marked = markCallAnswered(call.from);
-        if (marked) {
-          console.log(`[CALL] Atendida → follow-ups desativados para ${call.from}`);
-        } else {
-          console.log(`[CALL] Atendida mas nenhuma conversa ativa encontrada para ${call.from}`);
-        }
+        logger.info({ event: "call.answered", jid: call.from, conversation_found: marked });
       }
     }
   });
@@ -98,7 +98,7 @@ export async function startWhatsApp() {
       const from = msg.key.remoteJid;
 
       if (from?.endsWith("@g.us")) {
-        console.log(`[GRUPO] ${from} → (ignorado)`);
+        logger.debug({ event: "message.group_ignored", jid: from });
         continue;
       }
 
@@ -109,11 +109,12 @@ export async function startWhatsApp() {
 
       if (!text) {
         const tipos = Object.keys(msg.message).filter((k) => msg.message[k]);
-        console.log(`[DIRETO] ${from} → (não-texto: ${tipos.join(", ")}) — ignorado`);
+        logger.debug({ event: "message.non_text_ignored", jid: from, kinds: tipos });
         continue;
       }
 
-      console.log(`[DIRETO] ${from} → ${text}`);
+      messagesInTotal.inc();
+      logger.info({ event: "message.received", jid: from, preview: text.slice(0, 80) });
       enqueue(from, () => handleMessage(from, text, sock));
     }
   });
