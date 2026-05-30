@@ -90,10 +90,18 @@ export function getOrStartConversation(jid) {
   return db.prepare("INSERT INTO conversations (phone) VALUES (?)").run(phone).lastInsertRowid;
 }
 
-export function getHistory(conversationId) {
-  return db
-    .prepare("SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY created_at, id ASC")
-    .all(conversationId);
+const DEFAULT_HISTORY_LIMIT = 40;
+
+export function getHistory(conversationId, limit = DEFAULT_HISTORY_LIMIT) {
+  const rows = db
+    .prepare(
+      `SELECT role, content FROM messages
+       WHERE conversation_id = ?
+       ORDER BY created_at DESC, id DESC
+       LIMIT ?`
+    )
+    .all(conversationId, limit);
+  return rows.reverse();
 }
 
 export function addMessage(conversationId, role, content) {
