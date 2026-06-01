@@ -2,12 +2,14 @@ import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
+  downloadMediaMessage,
 } from "baileys";
 import qrcode from "qrcode-terminal";
 import { handleMessage } from "../handler.js";
 import { enqueue } from "./queue.js";
 import { startFollowUpScheduler } from "./followup.js";
 import { startMeetingReminderScheduler } from "../integrations/meeting-reminders.js";
+import { transcribeAudio } from "../integrations/whisper.js";
 import { markCallAnswered, markMessageProcessed, pruneProcessedMessages } from "../db.js";
 
 const SESSION_DIR = "./.baileys-auth";
@@ -114,14 +116,33 @@ export async function startWhatsApp() {
         msg.message.extendedTextMessage?.text ??
         null;
 
-      if (!text) {
-        const tipos = Object.keys(msg.message).filter((k) => msg.message[k]);
-        console.log(`[DIRETO] ${from} → (não-texto: ${tipos.join(", ")}) — ignorado`);
+      if (text) {
+        console.log(`[DIRETO] ${from} → ${text}`);
+        enqueue(from, () => handleMessage(from, text, sock));
         continue;
       }
 
-      console.log(`[DIRETO] ${from} → ${text}`);
-      enqueue(from, () => handleMessage(from, text, sock));
+      if (msg.message.audioMessage) {
+        console.log(`[AUDIO] ${from} → recebido (transcrevendo...)`);
+        enqueue(from, async () => {
+          try {
+            const buffer = await downloadMediaMessage(msg, "buffer", {}, { logger: silentLogger });
+            const transcribed = (await transcribeAudio(buffer))?.trim();
+            if (!transcribed) {
+              console.warn(`[AUDIO] ${from} → transcrição vazia, ignorando`);
+              return;
+            }
+            console.log(`[AUDIO] ${from} → "${transcribed}"`);
+            await handleMessage(from, transcribed, sock);
+          } catch (err) {
+            console.error(`[AUDIO] ${from} → erro: ${err?.message ?? err}`);
+          }
+        });
+        continue;
+      }
+
+      const tipos = Object.keys(msg.message).filter((k) => msg.message[k]);
+      console.log(`[DIRETO] ${from} → (não-texto: ${tipos.join(", ")}) — ignorado`);
     }
   });
 
