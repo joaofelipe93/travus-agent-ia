@@ -1,8 +1,8 @@
 import { mock, test, describe } from "node:test";
 import assert from "node:assert/strict";
 
-process.env.AGENTENDPOINT = "https://test.agents.do-ai.run";
-process.env.SECRETKEYAGENT = "test-secret-key";
+process.env.OPENAI_API_KEY = "test-openai-key";
+process.env.OPENAI_MODEL = "gpt-4o-mini-test";
 
 const { askAgent } = await import("../src/agent.js");
 
@@ -22,7 +22,10 @@ describe("askAgent", () => {
     assert.equal(mockCreate.mock.calls.length, 1);
 
     const [args] = mockCreate.mock.calls[0].arguments;
-    assert.equal(args.model, "n/a");
+    assert.equal(args.model, "gpt-4o-mini-test");
+
+    assert.equal(args.messages[0].role, "system", "primeira mensagem deve ser o system prompt");
+    assert.ok(args.messages[0].content.length > 100, "system prompt não deve estar vazio");
 
     const lastMessage = args.messages.at(-1);
     assert.equal(lastMessage.role, "user");
