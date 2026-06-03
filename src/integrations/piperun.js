@@ -37,5 +37,13 @@ export async function enviarLeadPipeRun({ nome, email, celular, renda_mensal, da
       `Piperun respondeu com HTTP ${res.status}. Payload enviado: ${JSON.stringify(body)}. Resposta: ${responseBody.slice(0, 500)}`
     );
   }
-  return res.json();
+
+  const json = await res.json();
+  if (json?.success === false) {
+    const motivo = json.data?.friendlyMsg ?? json.message ?? "(sem detalhe)";
+    throw new Error(
+      `Piperun retornou success=false. Motivo: ${motivo}. Payload enviado: ${JSON.stringify(body)}. Resposta: ${JSON.stringify(json).slice(0, 500)}`
+    );
+  }
+  return json;
 }
