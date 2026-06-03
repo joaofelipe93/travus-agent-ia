@@ -41,15 +41,14 @@ jobs:
         continue-on-error: true
         run: npm audit --audit-level=high
 
-      - name: Testar conexão com agente DigitalOcean
+      - name: Testar conexão com agente OpenAI
         env:
-          AGENTENDPOINT: ${{ secrets.AGENTENDPOINT }}
-          SECRETKEYAGENT: ${{ secrets.SECRETKEYAGENT }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          if [ -n "$AGENTENDPOINT" ] && [ -n "$SECRETKEYAGENT" ]; then
+          if [ -n "$OPENAI_API_KEY" ]; then
             npm run test:agent
           else
-            echo "Secrets AGENTENDPOINT e SECRETKEYAGENT não configuradas no repositório."
+            echo "Secret OPENAI_API_KEY não configurada no repositório."
             echo "Configure em: Settings → Secrets and variables → Actions → New repository secret"
             echo "Pulando teste de integração com o agente."
           fi
