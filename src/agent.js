@@ -1,17 +1,19 @@
 import OpenAI from "openai";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 
-const { AGENTENDPOINT, SECRETKEYAGENT } = process.env;
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const SYSTEM_PROMPT_PATH = resolve(__dirname, "..", "prompts", "ana.md");
+const SYSTEM_PROMPT = readFileSync(SYSTEM_PROMPT_PATH, "utf-8");
+const MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
 
-if (!AGENTENDPOINT || !SECRETKEYAGENT) {
-  throw new Error(
-    "Variáveis AGENTENDPOINT e SECRETKEYAGENT são obrigatórias. Verifique o arquivo .env."
-  );
+const apiKey = process.env.OPENAI_API_KEY;
+if (!apiKey) {
+  throw new Error("OPENAI_API_KEY não configurado no .env.");
 }
 
-const client = new OpenAI({
-  baseURL: `${AGENTENDPOINT.replace(/\/$/, "")}/api/v1/`,
-  apiKey: SECRETKEYAGENT,
-});
+const client = new OpenAI({ apiKey });
 
 function currentDateTime() {
   return new Date().toLocaleString("pt-BR", {
@@ -28,12 +30,13 @@ function currentDateTime() {
 export async function askAgent(history, userMessage, _client = client) {
   const messageWithContext = `[Data e horário em Brasília: ${currentDateTime()}]\n\n${userMessage}`;
   const messages = [
+    { role: "system", content: SYSTEM_PROMPT },
     ...history,
     { role: "user", content: messageWithContext },
   ];
 
   const response = await _client.chat.completions.create({
-    model: "n/a",
+    model: MODEL,
     messages,
   });
 
