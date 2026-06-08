@@ -7,6 +7,7 @@ import makeWASocket, {
 import qrcode from "qrcode-terminal";
 import { handleMessage } from "../handler.js";
 import { enqueue } from "./queue.js";
+import { bufferText } from "./buffer.js";
 import { startFollowUpScheduler } from "./followup.js";
 import { startMeetingReminderScheduler } from "../integrations/meeting-reminders.js";
 import { transcribeAudio } from "../integrations/whisper.js";
@@ -118,7 +119,9 @@ export async function startWhatsApp() {
 
       if (text) {
         console.log(`[DIRETO] ${from} → ${text}`);
-        enqueue(from, () => handleMessage(from, text, sock));
+        bufferText(from, text, (combined) =>
+          enqueue(from, () => handleMessage(from, combined, sock))
+        );
         continue;
       }
 
@@ -133,7 +136,9 @@ export async function startWhatsApp() {
               return;
             }
             console.log(`[AUDIO] ${from} → "${transcribed}"`);
-            await handleMessage(from, transcribed, sock);
+            bufferText(from, transcribed, (combined) =>
+              enqueue(from, () => handleMessage(from, combined, sock))
+            );
           } catch (err) {
             console.error(`[AUDIO] ${from} → erro: ${err?.message ?? err}`);
           }
