@@ -1,0 +1,32 @@
+import express from "express";
+import { piperunWebhookHandler } from "./webhook-piperun.js";
+
+let currentSock = null;
+let started = false;
+
+export function setSock(sock) {
+  currentSock = sock;
+}
+
+export function getSock() {
+  return currentSock;
+}
+
+export function startApi() {
+  if (started) return;
+  started = true;
+
+  const app = express();
+  app.use(express.json({ limit: "1mb" }));
+
+  app.get("/health", (_req, res) => {
+    res.json({ status: "ok", whatsapp_connected: currentSock !== null });
+  });
+
+  app.post("/webhook/piperun", piperunWebhookHandler);
+
+  const port = Number(process.env.API_PORT ?? 3000);
+  app.listen(port, () => {
+    console.log(`[API] ouvindo na porta ${port}`);
+  });
+}
