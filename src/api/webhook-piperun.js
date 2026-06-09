@@ -63,7 +63,21 @@ export async function piperunWebhookHandler(req, res) {
     return res.status(503).json({ error: "whatsapp not connected" });
   }
 
-  const jid = jidFromPhone(phone);
+  let result;
+  try {
+    [result] = await sock.onWhatsApp(phone);
+  } catch (err) {
+    console.error(`[WEBHOOK] erro ao consultar onWhatsApp(${phone}): ${err?.message ?? err}`);
+    return res.status(502).json({ error: "whatsapp lookup failed" });
+  }
+
+  if (!result?.exists) {
+    console.warn(`[WEBHOOK] número ${phone} não existe no WhatsApp — não enviando`);
+    return res.status(404).json({ error: "phone not on whatsapp", phone });
+  }
+
+  const jid = result.jid;
+  console.log(`[WEBHOOK] número ${phone} resolvido para JID ${jid}`);
   ensureContact(phone, jid);
 
   const recorded = recordWebhookDispatch(personId, stageId, jid, phone);
