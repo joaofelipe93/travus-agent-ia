@@ -11,6 +11,7 @@ import { bufferText } from "./buffer.js";
 import { startFollowUpScheduler } from "./followup.js";
 import { startMeetingReminderScheduler } from "../integrations/meeting-reminders.js";
 import { transcribeAudio } from "../integrations/whisper.js";
+import { setSock as setApiSock } from "../api/index.js";
 import { markCallAnswered, markMessageProcessed, pruneProcessedMessages } from "../db.js";
 
 const SESSION_DIR = "./.baileys-auth";
@@ -59,12 +60,15 @@ export async function startWhatsApp() {
 
     if (connection === "open") {
       console.log("[OK] Conectado ao WhatsApp. Aguardando mensagens...");
+      setApiSock(sock);
       startFollowUpScheduler(sock);
       startMeetingReminderScheduler(sock);
       try { pruneProcessedMessages(); } catch {}
     }
 
     if (connection === "close") {
+      setApiSock(null);
+
       const code = lastDisconnect?.error?.output?.statusCode;
       const msg = lastDisconnect?.error?.message ?? "?";
       const loggedOut = code === DisconnectReason.loggedOut;

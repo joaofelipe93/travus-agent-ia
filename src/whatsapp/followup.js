@@ -6,18 +6,7 @@ import {
 } from "../db.js";
 import { sendWithPresence } from "./presence.js";
 import { enqueue } from "./queue.js";
-
-function saudacaoBrasilia() {
-  const hh = new Date().toLocaleString("en-GB", {
-    timeZone: "America/Sao_Paulo",
-    hour: "2-digit",
-    hourCycle: "h23",
-  });
-  const h = parseInt(hh, 10);
-  if (h >= 4 && h <= 11) return "Bom dia";
-  if (h >= 12 && h <= 17) return "Boa tarde";
-  return "Boa noite";
-}
+import { saudacaoBrasilia } from "../utils/saudacao.js";
 
 function templateFor(step) {
   if (step === 1) return "Oi! Você ainda tá por aí?";

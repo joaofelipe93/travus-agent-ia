@@ -63,6 +63,16 @@ db.exec(`
     processed_at INTEGER NOT NULL DEFAULT (unixepoch())
   );
   CREATE INDEX IF NOT EXISTS idx_processed_at ON processed_messages(processed_at);
+
+  CREATE TABLE IF NOT EXISTS webhook_dispatches (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    person_id     TEXT    NOT NULL,
+    stage_id      TEXT    NOT NULL,
+    jid           TEXT    NOT NULL,
+    phone         TEXT    NOT NULL,
+    dispatched_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    UNIQUE(person_id, stage_id)
+  );
 `);
 
 function ensureColumn(table, column, definition) {
@@ -259,6 +269,24 @@ export function hasUserMessageAfter(jid, timestampUnix) {
      LIMIT 1
   `).get(jid, timestampUnix);
   return !!row;
+}
+
+export function ensureContact(phone, jid) {
+  db.prepare("INSERT OR IGNORE INTO contacts (phone, jid) VALUES (?, ?)").run(phone, jid);
+}
+
+export function hasWebhookDispatched(personId, stageId) {
+  const row = db.prepare(
+    "SELECT 1 FROM webhook_dispatches WHERE person_id = ? AND stage_id = ?"
+  ).get(String(personId), String(stageId));
+  return !!row;
+}
+
+export function recordWebhookDispatch(personId, stageId, jid, phone) {
+  const result = db.prepare(
+    "INSERT OR IGNORE INTO webhook_dispatches (person_id, stage_id, jid, phone) VALUES (?, ?, ?, ?)"
+  ).run(String(personId), String(stageId), jid, phone);
+  return result.changes > 0;
 }
 
 export function markMessageProcessed(messageId) {
