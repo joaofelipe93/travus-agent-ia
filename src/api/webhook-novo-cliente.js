@@ -12,6 +12,7 @@ import { getSock } from "./index.js";
 import { getPerson, moveDealToStage } from "./piperun-api.js";
 
 const DESTINATION_STAGE_ID = Number(process.env.PIPERUN_NEW_CLIENT_DESTINATION_STAGE_ID ?? 648382);
+const REQUIRED_ORIGIN = process.env.NOVO_CLIENTE_REQUIRED_ORIGIN ?? "LP V2";
 
 function firstName(fullName) {
   return String(fullName ?? "").trim().split(/\s+/)[0] || "";
@@ -44,6 +45,12 @@ export async function novoClienteWebhookHandler(req, res) {
   if (!dealId || !personId || !stageId) {
     console.warn("[NOVO_CLIENTE] payload sem id (deal), person.id ou stage.id, ignorando");
     return res.status(400).json({ error: "missing id, person.id or stage.id" });
+  }
+
+  const originName = payload?.origin?.name;
+  if (originName !== REQUIRED_ORIGIN) {
+    console.log(`[NOVO_CLIENTE] origin "${originName ?? "(vazio)"}" diferente de "${REQUIRED_ORIGIN}", ignorando`);
+    return res.status(200).json({ status: "ignored_origin", origin: originName ?? null });
   }
 
   if (hasWebhookDispatched(personId, stageId)) {
