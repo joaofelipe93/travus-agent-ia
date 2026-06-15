@@ -4,6 +4,7 @@ import {
   recordWebhookDispatch,
   getOrStartConversation,
   addMessage,
+  phoneFromJid,
 } from "../db.js";
 import { enqueue } from "../whatsapp/queue.js";
 import { sendWithPresence } from "../whatsapp/presence.js";
@@ -99,10 +100,11 @@ export async function novoClienteWebhookHandler(req, res) {
   }
 
   const jid = lookup.jid;
-  console.log(`[NOVO_CLIENTE] ${nome} (${phone}) → JID ${jid}`);
-  ensureContact(phone, jid);
+  const canonicalPhone = phoneFromJid(jid);
+  console.log(`[NOVO_CLIENTE] ${nome} (CRM phone=${phone}) → JID ${jid} (canonical=${canonicalPhone})`);
+  ensureContact(canonicalPhone, jid);
 
-  const recorded = recordWebhookDispatch(personId, stageId, jid, phone);
+  const recorded = recordWebhookDispatch(personId, stageId, jid, canonicalPhone);
   if (!recorded) {
     console.log(`[NOVO_CLIENTE] race - outro processo registrou primeiro person_id=${personId}`);
     return res.status(200).json({ status: "already_dispatched" });
@@ -111,21 +113,30 @@ export async function novoClienteWebhookHandler(req, res) {
   const message = buildInitialMessage(nome);
 
   enqueue(jid, async () => {
+    let sent = false;
     try {
       await sendWithPresence(sock, jid, message);
-      const convId = getOrStartConversation(jid);
-      addMessage(convId, "assistant", message);
-      console.log(`[NOVO_CLIENTE] mensagem inicial enviada para ${jid}, conv_id=${convId}`);
+      sent = true;
+      console.log(`[NOVO_CLIENTE] mensagem inicial enviada para ${jid}`);
     } catch (err) {
-      console.error(`[NOVO_CLIENTE] erro ao enviar inicial para ${jid}: ${err?.message ?? err}`);
-      return;
+      console.error(`[NOVO_CLIENTE] erro ao ENVIAR mensagem para ${jid}: ${err?.message ?? err}`);
     }
 
-    try {
-      await moveDealToStage(dealId, DESTINATION_STAGE_ID);
-      console.log(`[NOVO_CLIENTE] deal ${dealId} movido para stage ${DESTINATION_STAGE_ID}`);
-    } catch (err) {
-      console.error(`[NOVO_CLIENTE] erro ao mover deal ${dealId} para stage ${DESTINATION_STAGE_ID}: ${err?.message ?? err}`);
+    if (sent) {
+      try {
+        const convId = getOrStartConversation(jid);
+        addMessage(convId, "assistant", message);
+        console.log(`[NOVO_CLIENTE] gravado em conv_id=${convId}`);
+      } catch (err) {
+        console.error(`[NOVO_CLIENTE] mensagem entregue mas erro ao persistir local: ${err?.message ?? err}`);
+      }
+
+      try {
+        await moveDealToStage(dealId, DESTINATION_STAGE_ID);
+        console.log(`[NOVO_CLIENTE] deal ${dealId} movido para stage ${DESTINATION_STAGE_ID}`);
+      } catch (err) {
+        console.error(`[NOVO_CLIENTE] erro ao mover deal ${dealId} para stage ${DESTINATION_STAGE_ID}: ${err?.message ?? err}`);
+      }
     }
   });
 

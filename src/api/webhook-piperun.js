@@ -4,6 +4,7 @@ import {
   ensureContact,
   hasWebhookDispatched,
   recordWebhookDispatch,
+  phoneFromJid,
 } from "../db.js";
 import { enqueue } from "../whatsapp/queue.js";
 import { sendWithPresence } from "../whatsapp/presence.js";
@@ -77,10 +78,11 @@ export async function piperunWebhookHandler(req, res) {
   }
 
   const jid = result.jid;
-  console.log(`[WEBHOOK] número ${phone} resolvido para JID ${jid}`);
-  ensureContact(phone, jid);
+  const canonicalPhone = phoneFromJid(jid);
+  console.log(`[WEBHOOK] número CRM=${phone} resolvido para JID ${jid} (canonical=${canonicalPhone})`);
+  ensureContact(canonicalPhone, jid);
 
-  const recorded = recordWebhookDispatch(personId, stageId, jid, phone);
+  const recorded = recordWebhookDispatch(personId, stageId, jid, canonicalPhone);
   if (!recorded) {
     console.log(`[WEBHOOK] race - outro processo registrou primeiro person_id=${personId}`);
     return res.status(200).json({ status: "already_dispatched" });
