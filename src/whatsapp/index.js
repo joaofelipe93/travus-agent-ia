@@ -3,6 +3,7 @@ import makeWASocket, {
   DisconnectReason,
   fetchLatestBaileysVersion,
   downloadMediaMessage,
+  jidNormalizedUser,
 } from "baileys";
 import qrcode from "qrcode-terminal";
 import { handleMessage } from "../handler.js";
@@ -16,6 +17,23 @@ import { markCallAnswered, markMessageProcessed, pruneProcessedMessages } from "
 
 const SESSION_DIR = "./.baileys-auth";
 const RECONNECT_DELAY_MS = 2000;
+
+async function resolveLidToPn(sock, jid) {
+  if (!jid || !jid.endsWith("@lid")) return jid;
+  try {
+    const pnJid = await sock.signalRepository?.lidMapping?.getPNForLID?.(jid);
+    if (!pnJid) {
+      console.warn(`[LID] sem mapping reverso pra ${jid} — usando @lid mesmo`);
+      return jid;
+    }
+    const normalized = jidNormalizedUser(pnJid);
+    console.log(`[LID] ${jid} → ${normalized}`);
+    return normalized;
+  } catch (err) {
+    console.warn(`[LID] erro ao resolver ${jid}: ${err?.message ?? err}`);
+    return jid;
+  }
+}
 
 const silentLogger = {
   level: "silent",
@@ -85,13 +103,14 @@ export async function startWhatsApp() {
 
   sock.ev.on("call", async (calls) => {
     for (const call of calls) {
-      console.log(`[CALL] event id=${call.id} from=${call.from} status=${call.status} video=${call.isVideo ?? false}`);
-      if (call.status === "accept" && call.from) {
-        const marked = markCallAnswered(call.from);
+      const from = await resolveLidToPn(sock, call.from);
+      console.log(`[CALL] event id=${call.id} from=${from} status=${call.status} video=${call.isVideo ?? false}`);
+      if (call.status === "accept" && from) {
+        const marked = markCallAnswered(from);
         if (marked) {
-          console.log(`[CALL] Atendida → follow-ups desativados para ${call.from}`);
+          console.log(`[CALL] Atendida → follow-ups desativados para ${from}`);
         } else {
-          console.log(`[CALL] Atendida mas nenhuma conversa ativa encontrada para ${call.from}`);
+          console.log(`[CALL] Atendida mas nenhuma conversa ativa encontrada para ${from}`);
         }
       }
     }
@@ -109,12 +128,14 @@ export async function startWhatsApp() {
         continue;
       }
 
-      const from = msg.key.remoteJid;
+      const rawJid = msg.key.remoteJid;
 
-      if (from?.endsWith("@g.us")) {
-        console.log(`[GRUPO] ${from} → (ignorado)`);
+      if (rawJid?.endsWith("@g.us")) {
+        console.log(`[GRUPO] ${rawJid} → (ignorado)`);
         continue;
       }
+
+      const from = await resolveLidToPn(sock, rawJid);
 
       const text =
         msg.message.conversation ??
