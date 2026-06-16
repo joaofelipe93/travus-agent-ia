@@ -8,10 +8,53 @@ import {
   disableFollowUps,
   isBotEnabled,
   disableBot,
+  getConversationDealId,
+  setConversationDealId,
 } from "./db.js";
 import { enviarLeadPipeRun } from "./integrations/piperun.js";
 import { createCalendarEvent } from "./integrations/calendar.js";
 import { sendWithPresence } from "./whatsapp/presence.js";
+import { moveDealToStage, findDealIdByEmail } from "./api/piperun-api.js";
+
+const CONNECTION_STAGE_ID = Number(process.env.PIPERUN_CONNECTION_STAGE_ID ?? 648383);
+
+function extractDealIdFromPiperunResponse(resp) {
+  const candidates = [
+    resp?.data?.leads?.[0]?.deal_id,
+    resp?.data?.leads?.[0]?.dealId,
+    resp?.data?.leads?.[0]?.id,
+    resp?.data?.deals?.[0]?.id,
+    resp?.data?.deal?.id,
+    resp?.data?.deal_id,
+  ];
+  for (const c of candidates) {
+    if (c) return String(c);
+  }
+  return null;
+}
+
+async function resolveDealIdForConnectionMove(convId, lead, piperunResp) {
+  const fromConv = getConversationDealId(convId);
+  if (fromConv) return { dealId: fromConv, source: "conversation" };
+
+  const fromResp = extractDealIdFromPiperunResponse(piperunResp);
+  if (fromResp) {
+    setConversationDealId(convId, fromResp);
+    return { dealId: fromResp, source: "piperun_response" };
+  }
+
+  try {
+    const fromApi = await findDealIdByEmail(lead.email);
+    if (fromApi) {
+      setConversationDealId(convId, fromApi);
+      return { dealId: String(fromApi), source: "api_lookup" };
+    }
+  } catch (err) {
+    console.error(`[CRM] falha ao buscar deal via API (email=${lead.email}): ${err?.message ?? err}`);
+  }
+
+  return { dealId: null, source: null };
+}
 
 const LEAD_FIELDS = ["nome", "email", "celular", "renda_mensal", "data_agendamento", "hora_agendamento"];
 const SYSTEM_PREFIX_REGEX = /\[Número do WhatsApp do lead:[^\]]*\]\s*/g;
@@ -151,18 +194,38 @@ export async function handleMessage(from, text, sock) {
     } catch (dbErr) {
       console.error(`[LEAD] Erro ao gravar lead local: ${dbErr?.message ?? dbErr}`);
     }
+    let piperunResp = null;
     try {
-      const piperunResp = await enviarLeadPipeRun(lead);
+      piperunResp = await enviarLeadPipeRun(lead);
       console.log(`[CRM] Lead enviado para Piperun: ${lead.nome} | ${lead.celular}`);
       console.log(`[CRM] Resposta Piperun: ${JSON.stringify(piperunResp).slice(0, 800)}`);
     } catch (crmErr) {
       console.error(`[CRM] Erro ao enviar para Piperun: ${crmErr?.message ?? crmErr}`);
     }
+
+    let calendarOk = false;
     try {
       const evento = await createCalendarEvent(lead);
-      if (evento) console.log(`[CALENDAR] Evento criado: ${evento.htmlLink}`);
+      if (evento) {
+        console.log(`[CALENDAR] Evento criado: ${evento.htmlLink}`);
+        calendarOk = true;
+      }
     } catch (calErr) {
       console.error(`[CALENDAR] Erro ao criar evento: ${calErr?.message ?? calErr}`);
+    }
+
+    if (calendarOk) {
+      try {
+        const { dealId, source } = await resolveDealIdForConnectionMove(convId, lead, piperunResp);
+        if (dealId) {
+          await moveDealToStage(dealId, CONNECTION_STAGE_ID);
+          console.log(`[CRM] deal ${dealId} movido para stage Conexão (${CONNECTION_STAGE_ID}) — fonte: ${source}`);
+        } else {
+          console.warn(`[CRM] deal_id não resolvido para ${lead.email} — não foi possível mover para Conexão`);
+        }
+      } catch (moveErr) {
+        console.error(`[CRM] erro ao mover deal para Conexão: ${moveErr?.message ?? moveErr}`);
+      }
     }
   }
 }
