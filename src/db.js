@@ -87,6 +87,7 @@ ensureColumn("conversations", "followup_step", "INTEGER NOT NULL DEFAULT 0");
 ensureColumn("conversations", "disqualified", "TEXT");
 ensureColumn("conversations", "bot_enabled", "INTEGER NOT NULL DEFAULT 1");
 ensureColumn("conversations", "call_answered_at", "INTEGER");
+ensureColumn("conversations", "piperun_deal_id", "TEXT");
 
 export function phoneFromJid(jid) {
   return jid.split("@")[0];
@@ -287,6 +288,17 @@ export function recordWebhookDispatch(personId, stageId, jid, phone) {
     "INSERT OR IGNORE INTO webhook_dispatches (person_id, stage_id, jid, phone) VALUES (?, ?, ?, ?)"
   ).run(String(personId), String(stageId), jid, phone);
   return result.changes > 0;
+}
+
+export function setConversationDealId(conversationId, dealId) {
+  db.prepare(
+    "UPDATE conversations SET piperun_deal_id = ?, updated_at = unixepoch() WHERE id = ?"
+  ).run(String(dealId), conversationId);
+}
+
+export function getConversationDealId(conversationId) {
+  const row = db.prepare("SELECT piperun_deal_id FROM conversations WHERE id = ?").get(conversationId);
+  return row?.piperun_deal_id ?? null;
 }
 
 export function markMessageProcessed(messageId) {

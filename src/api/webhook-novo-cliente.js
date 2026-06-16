@@ -5,6 +5,7 @@ import {
   getOrStartConversation,
   addMessage,
   phoneFromJid,
+  setConversationDealId,
 } from "../db.js";
 import { enqueue } from "../whatsapp/queue.js";
 import { sendWithPresence } from "../whatsapp/presence.js";
@@ -126,7 +127,8 @@ export async function novoClienteWebhookHandler(req, res) {
       try {
         const convId = getOrStartConversation(jid);
         addMessage(convId, "assistant", message);
-        console.log(`[NOVO_CLIENTE] gravado em conv_id=${convId}`);
+        setConversationDealId(convId, dealId);
+        console.log(`[NOVO_CLIENTE] gravado em conv_id=${convId} (deal_id=${dealId})`);
       } catch (err) {
         console.error(`[NOVO_CLIENTE] mensagem entregue mas erro ao persistir local: ${err?.message ?? err}`);
       }
