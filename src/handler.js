@@ -80,10 +80,18 @@ function resolveLeadCelular(lead, convId, jid) {
   return normalized;
 }
 
-function buildAgentInput(text, jid) {
-  if (!jid?.endsWith("@s.whatsapp.net")) return text;
-  const phone = phoneFromJid(jid);
-  return `[Número do WhatsApp do lead: ${phone}]\n\n${text}`;
+function buildAgentInput(text, jid, history) {
+  const parts = [];
+  if (jid?.endsWith("@s.whatsapp.net")) {
+    parts.push(`[Número do WhatsApp do lead: ${phoneFromJid(jid)}]`);
+  }
+  if (history?.length === 1 && history[0].role === "assistant") {
+    parts.push(
+      "[Contexto: Lead veio do formulário da LP. Você já se apresentou e perguntou se ele topa responder algumas perguntas — essa é a 1ª resposta dele. Pule a saudação e o passo de perguntar o nome (já tá na sua mensagem anterior). Vá direto pro passo 3 (intenção: morar ou investir).]"
+    );
+  }
+  if (parts.length === 0) return text;
+  return `${parts.join("\n")}\n\n${text}`;
 }
 
 export async function handleMessage(from, text, sock) {
@@ -104,7 +112,7 @@ export async function handleMessage(from, text, sock) {
     return;
   }
 
-  const resposta = await askAgent(history, buildAgentInput(text, from));
+  const resposta = await askAgent(history, buildAgentInput(text, from, history));
   addMessage(convId, "assistant", resposta);
 
   const { cleanText, lead, closeReason } = processAgentResponse(resposta);
