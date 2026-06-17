@@ -43,6 +43,10 @@ async function resolveJid(sock, phone) {
   return null;
 }
 
+function extractPersonId(deal) {
+  return deal?.person?.id ?? deal?.person_id ?? deal?.contact_id ?? deal?.person?.person_id ?? null;
+}
+
 async function processDeal(sock, deal) {
   const dealId = deal?.id;
   if (!dealId) {
@@ -50,9 +54,9 @@ async function processDeal(sock, deal) {
     return { ok: false, reason: "deal_sem_id" };
   }
 
-  const personId = deal?.person?.id;
+  const personId = extractPersonId(deal);
   if (!personId) {
-    console.warn(`[BOLETOS] deal ${dealId} sem person.id, pulando`);
+    console.warn(`[BOLETOS] deal ${dealId} sem person.id (chaves disponíveis: ${Object.keys(deal ?? {}).join(", ")}), pulando`);
     return { ok: false, reason: "sem_person_id" };
   }
 
