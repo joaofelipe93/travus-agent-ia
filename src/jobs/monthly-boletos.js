@@ -14,6 +14,7 @@ import { sendWithPresence } from "../whatsapp/presence.js";
 
 const STAGE_ID = Number(process.env.PIPERUN_BOLETOS_STAGE_ID ?? 679217);
 const PACING_MS = Number(process.env.BOLETOS_PACING_MS ?? 3000);
+const BILL_PACING_MS = Number(process.env.BOLETOS_BILL_PACING_MS ?? 1500);
 const DEFAULT_MESSAGE = "Olá, {{primeiro_nome}}! Segue seu boleto do mês 📄\n\nQualquer dúvida estou à disposição.";
 
 function firstName(fullName) {
@@ -139,6 +140,7 @@ async function processDeal(sock, deal) {
         pdfBuffer = await fetchOverdueBillPdf(grupo, cotaCode, billId, transactionId);
       } catch (err) {
         console.error(`[BOLETOS] deal ${dealId} bill ${billId} → erro fetchOverdueBillPdf: ${err?.message ?? err}`);
+        await sleep(BILL_PACING_MS);
         continue;
       }
 
@@ -166,6 +168,7 @@ async function processDeal(sock, deal) {
       } catch (err) {
         console.error(`[BOLETOS] deal ${dealId} bill ${billId} → erro envio whatsapp: ${err?.message ?? err}`);
       }
+      await sleep(BILL_PACING_MS);
     }
   }
 
