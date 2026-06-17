@@ -25,6 +25,68 @@ export async function getPerson(personId) {
   return json?.data ?? null;
 }
 
+export async function listDealsByStage(stageId, { pageSize = 100 } = {}) {
+  const all = [];
+  let page = 1;
+  while (true) {
+    const url = `${BASE_URL}/deals?stage_id=${encodeURIComponent(stageId)}&page=${page}&show=${pageSize}`;
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { accept: "application/json", token: token() },
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "(corpo ilegível)");
+      throw new Error(`Piperun GET /deals?stage_id=${stageId} → HTTP ${res.status}: ${body.slice(0, 300)}`);
+    }
+    const json = await res.json();
+    if (json?.success === false) {
+      throw new Error(`Piperun GET /deals?stage_id → success=false: ${JSON.stringify(json).slice(0, 300)}`);
+    }
+    const data = Array.isArray(json?.data) ? json.data : [];
+    all.push(...data);
+    const meta = json?.meta?.pagination;
+    if (!meta || page >= (meta.total_pages ?? 1) || data.length === 0) break;
+    page += 1;
+  }
+  return all;
+}
+
+const CPF_FIELD_NAMES = ["cpf", "CPF", "Cpf"];
+
+export function extractCpfFromPerson(person) {
+  if (!person) return null;
+  for (const key of CPF_FIELD_NAMES) {
+    if (typeof person[key] === "string" && person[key].trim()) return person[key].trim();
+  }
+  const containers = [person.custom_fields, person.fields, person.fields_attributes];
+  for (const container of containers) {
+    if (!container) continue;
+    if (Array.isArray(container)) {
+      for (const f of container) {
+        const name = f?.name ?? f?.label ?? f?.key;
+        const value = f?.value ?? f?.content;
+        if (typeof name === "string" && /cpf/i.test(name) && typeof value === "string" && value.trim()) {
+          return value.trim();
+        }
+      }
+    } else if (typeof container === "object") {
+      for (const [k, v] of Object.entries(container)) {
+        if (/cpf/i.test(k) && typeof v === "string" && v.trim()) return v.trim();
+      }
+    }
+  }
+  return null;
+}
+
+function extractPhoneFromPerson(person) {
+  const phones = person?.contact_phones;
+  if (!Array.isArray(phones) || phones.length === 0) return null;
+  const main = phones.find((p) => p?.is_main === true);
+  return (main ?? phones[0])?.number ?? null;
+}
+
+export { extractPhoneFromPerson };
+
 async function listPersonsByEmail(email) {
   const url = `${BASE_URL}/persons?email=${encodeURIComponent(email)}`;
   const res = await fetch(url, {

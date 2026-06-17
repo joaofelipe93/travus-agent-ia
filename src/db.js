@@ -64,6 +64,29 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_processed_at ON processed_messages(processed_at);
 
+  CREATE TABLE IF NOT EXISTS boleto_clients (
+    deal_id    TEXT    PRIMARY KEY,
+    person_id  TEXT,
+    cpf        TEXT,
+    nome       TEXT,
+    phone      TEXT,
+    jid        TEXT,
+    synced_at  INTEGER NOT NULL DEFAULT (unixepoch())
+  );
+  CREATE INDEX IF NOT EXISTS idx_boleto_clients_phone ON boleto_clients(phone);
+
+  CREATE TABLE IF NOT EXISTS boletos_sent (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    deal_id         TEXT    NOT NULL,
+    bill_id         TEXT    NOT NULL,
+    parcel_number   TEXT,
+    group_code      TEXT,
+    cota_code       TEXT,
+    transaction_id  TEXT,
+    sent_at         INTEGER NOT NULL DEFAULT (unixepoch()),
+    UNIQUE(deal_id, bill_id)
+  );
+
   CREATE TABLE IF NOT EXISTS webhook_dispatches (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     person_id     TEXT    NOT NULL,
@@ -299,6 +322,39 @@ export function setConversationDealId(conversationId, dealId) {
 export function getConversationDealId(conversationId) {
   const row = db.prepare("SELECT piperun_deal_id FROM conversations WHERE id = ?").get(conversationId);
   return row?.piperun_deal_id ?? null;
+}
+
+export function upsertBoletoClient({ deal_id, person_id, cpf, nome, phone, jid }) {
+  db.prepare(`
+    INSERT INTO boleto_clients (deal_id, person_id, cpf, nome, phone, jid, synced_at)
+    VALUES (?, ?, ?, ?, ?, ?, unixepoch())
+    ON CONFLICT(deal_id) DO UPDATE SET
+      person_id = excluded.person_id,
+      cpf = excluded.cpf,
+      nome = excluded.nome,
+      phone = excluded.phone,
+      jid = excluded.jid,
+      synced_at = unixepoch()
+  `).run(String(deal_id), person_id ? String(person_id) : null, cpf ?? null, nome ?? null, phone ?? null, jid ?? null);
+}
+
+export function listBoletoClients() {
+  return db.prepare("SELECT * FROM boleto_clients ORDER BY synced_at DESC").all();
+}
+
+export function recordBoletoSent({ deal_id, bill_id, parcel_number, group_code, cota_code, transaction_id }) {
+  const result = db.prepare(`
+    INSERT OR IGNORE INTO boletos_sent (deal_id, bill_id, parcel_number, group_code, cota_code, transaction_id)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(String(deal_id), String(bill_id), parcel_number ?? null, group_code ?? null, cota_code ?? null, transaction_id ? String(transaction_id) : null);
+  return result.changes > 0;
+}
+
+export function hasBoletoBeenSent(dealId, billId) {
+  const row = db.prepare(
+    "SELECT 1 FROM boletos_sent WHERE deal_id = ? AND bill_id = ?"
+  ).get(String(dealId), String(billId));
+  return !!row;
 }
 
 export function markMessageProcessed(messageId) {
