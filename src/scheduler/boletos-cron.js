@@ -1,0 +1,39 @@
+import cron from "node-cron";
+import { runMonthlyBoletos } from "../jobs/monthly-boletos.js";
+import { getSock } from "../api/index.js";
+
+const DEFAULT_SCHEDULE = "0 9 10 * *";
+const TZ = "America/Sao_Paulo";
+
+let scheduled = false;
+
+export function startBoletosCron() {
+  if (scheduled) return;
+  if (process.env.BOLETOS_ENABLED === "false") {
+    console.log("[BOLETOS_CRON] desativado via BOLETOS_ENABLED=false");
+    return;
+  }
+
+  const schedule = process.env.BOLETOS_CRON ?? DEFAULT_SCHEDULE;
+  if (!cron.validate(schedule)) {
+    console.error(`[BOLETOS_CRON] expressão inválida "${schedule}", abortando agendamento`);
+    return;
+  }
+
+  cron.schedule(
+    schedule,
+    async () => {
+      console.log("[BOLETOS_CRON] disparado");
+      const sock = getSock();
+      try {
+        await runMonthlyBoletos(sock);
+      } catch (err) {
+        console.error(`[BOLETOS_CRON] erro no run: ${err?.message ?? err}`);
+      }
+    },
+    { timezone: TZ }
+  );
+
+  scheduled = true;
+  console.log(`[BOLETOS_CRON] agendado: "${schedule}" (${TZ})`);
+}
