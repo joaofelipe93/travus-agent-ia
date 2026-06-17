@@ -29,7 +29,7 @@ export async function listDealsByStage(stageId, { pageSize = 100 } = {}) {
   const all = [];
   let page = 1;
   while (true) {
-    const url = `${BASE_URL}/deals?stage_id=${encodeURIComponent(stageId)}&page=${page}&show=${pageSize}`;
+    const url = `${BASE_URL}/deals?stage_id=${encodeURIComponent(stageId)}&page=${page}&show=${pageSize}&with=person`;
     const res = await fetch(url, {
       method: "GET",
       headers: { accept: "application/json", token: token() },
