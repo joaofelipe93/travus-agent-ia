@@ -176,7 +176,8 @@ export async function handleMessage(from, text, sock) {
     const reply = buildScheduledReply(convId);
     await sendWithPresence(sock, from, reply);
     addMessage(convId, "assistant", reply);
-    console.log(`[AGENDADO] resposta canned → ${from}`);
+    disableBot(convId);
+    console.log(`[AGENDADO] resposta canned enviada e bot silenciado (modo manual) → ${from}`);
     return;
   }
 
