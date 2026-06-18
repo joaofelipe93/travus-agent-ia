@@ -111,6 +111,7 @@ ensureColumn("conversations", "disqualified", "TEXT");
 ensureColumn("conversations", "bot_enabled", "INTEGER NOT NULL DEFAULT 1");
 ensureColumn("conversations", "call_answered_at", "INTEGER");
 ensureColumn("conversations", "piperun_deal_id", "TEXT");
+ensureColumn("conversations", "scheduled_at", "INTEGER");
 
 export function phoneFromJid(jid) {
   return jid.split("@")[0];
@@ -311,6 +312,23 @@ export function recordWebhookDispatch(personId, stageId, jid, phone) {
     "INSERT OR IGNORE INTO webhook_dispatches (person_id, stage_id, jid, phone) VALUES (?, ?, ?, ?)"
   ).run(String(personId), String(stageId), jid, phone);
   return result.changes > 0;
+}
+
+export function markConversationScheduled(conversationId) {
+  db.prepare(
+    "UPDATE conversations SET scheduled_at = unixepoch(), updated_at = unixepoch() WHERE id = ?"
+  ).run(conversationId);
+}
+
+export function isConversationScheduled(conversationId) {
+  const row = db.prepare("SELECT scheduled_at FROM conversations WHERE id = ?").get(conversationId);
+  return !!row?.scheduled_at;
+}
+
+export function getLeadByConversation(conversationId) {
+  return db.prepare(
+    "SELECT nome, email, celular, data_agendamento, hora_agendamento FROM leads WHERE conversation_id = ?"
+  ).get(conversationId);
 }
 
 export function setConversationDealId(conversationId, dealId) {
