@@ -10,6 +10,9 @@ import {
   disableBot,
   getConversationDealId,
   setConversationDealId,
+  markConversationScheduled,
+  isConversationScheduled,
+  getLeadByConversation,
 } from "./db.js";
 import { enviarLeadPipeRun } from "./integrations/piperun.js";
 import { createCalendarEvent } from "./integrations/calendar.js";
@@ -17,6 +20,20 @@ import { sendWithPresence } from "./whatsapp/presence.js";
 import { moveDealToStage, findDealIdByEmail } from "./api/piperun-api.js";
 
 const CONNECTION_STAGE_ID = Number(process.env.PIPERUN_CONNECTION_STAGE_ID ?? 648383);
+const SCHEDULED_REPLY_TEMPLATE =
+  process.env.SCHEDULED_REPLY_TEMPLATE ??
+  "Oi{{nome_sufixo}}! Seu agendamento já tá confirmado 😊\n\nO especialista vai te passar mais informações na hora da call. Qualquer coisa, tô por aqui.";
+
+function firstName(fullName) {
+  return String(fullName ?? "").trim().split(/\s+/)[0] || "";
+}
+
+function buildScheduledReply(convId) {
+  const lead = getLeadByConversation(convId);
+  const primeiro = firstName(lead?.nome);
+  const sufixo = primeiro ? `, ${primeiro}` : "";
+  return SCHEDULED_REPLY_TEMPLATE.replaceAll("{{nome_sufixo}}", sufixo).replaceAll("{{primeiro_nome}}", primeiro);
+}
 
 function extractDealIdFromPiperunResponse(resp) {
   const candidates = [
@@ -155,6 +172,15 @@ export async function handleMessage(from, text, sock) {
     return;
   }
 
+  if (isConversationScheduled(convId)) {
+    const reply = buildScheduledReply(convId);
+    await sendWithPresence(sock, from, reply);
+    addMessage(convId, "assistant", reply);
+    disableBot(convId);
+    console.log(`[AGENDADO] resposta canned enviada e bot silenciado (modo manual) → ${from}`);
+    return;
+  }
+
   const resposta = await askAgent(history, buildAgentInput(text, from, history));
   addMessage(convId, "assistant", resposta);
 
@@ -190,7 +216,8 @@ export async function handleMessage(from, text, sock) {
   if (lead) {
     try {
       recordLeadCapture(convId, lead);
-      console.log(`[LEAD] capturado localmente: ${lead.nome} | ${lead.celular}`);
+      markConversationScheduled(convId);
+      console.log(`[LEAD] capturado localmente: ${lead.nome} | ${lead.celular} (conversa marcada como agendada)`);
     } catch (dbErr) {
       console.error(`[LEAD] Erro ao gravar lead local: ${dbErr?.message ?? dbErr}`);
     }
