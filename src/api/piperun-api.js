@@ -6,8 +6,13 @@ function token() {
   return t;
 }
 
-export async function getPerson(personId) {
-  const res = await fetch(`${BASE_URL}/persons/${personId}`, {
+const DEFAULT_PERSON_WITH = "contactPhones,contactEmails";
+
+export async function getPerson(personId, { include = DEFAULT_PERSON_WITH } = {}) {
+  const url = include
+    ? `${BASE_URL}/persons/${personId}?with=${encodeURIComponent(include)}`
+    : `${BASE_URL}/persons/${personId}`;
+  const res = await fetch(url, {
     method: "GET",
     headers: {
       accept: "application/json",
@@ -79,10 +84,15 @@ export function extractCpfFromPerson(person) {
 }
 
 function extractPhoneFromPerson(person) {
-  const phones = person?.contact_phones;
-  if (!Array.isArray(phones) || phones.length === 0) return null;
-  const main = phones.find((p) => p?.is_main === true);
-  return (main ?? phones[0])?.number ?? null;
+  const sources = [person?.contact_phones, person?.contactPhones];
+  for (const phones of sources) {
+    if (!Array.isArray(phones) || phones.length === 0) continue;
+    const main = phones.find((p) => p?.is_main === true || p?.is_main === 1);
+    const chosen = main ?? phones[0];
+    const value = chosen?.number ?? chosen?.phone;
+    if (value) return value;
+  }
+  return null;
 }
 
 export { extractPhoneFromPerson };
