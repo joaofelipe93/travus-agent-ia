@@ -1,13 +1,20 @@
-const BASE_URL = "https://www.consorciocanopus.com.br/extensions/boleto-facil-rolledback/public/index.php";
+const BASE_URL = (
+  process.env.CANOPUS_BASE_URL ??
+  "https://www.consorciocanopus.com.br/extensions/boleto-facil-rolledback/public/index.php"
+).replace(/\/+$/, "");
 const DEFAULT_UA =
   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 function browserHeaders(extra = {}) {
-  return {
+  const headers = {
     "user-agent": process.env.CANOPUS_USER_AGENT ?? DEFAULT_UA,
     "accept-language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
     ...extra,
   };
+  if (process.env.CANOPUS_PROXY_TOKEN) {
+    headers["x-proxy-token"] = process.env.CANOPUS_PROXY_TOKEN;
+  }
+  return headers;
 }
 
 function cleanCpf(cpf) {
