@@ -182,9 +182,10 @@ export async function handleMessage(from, text, sock) {
   }
 
   const resposta = await askAgent(history, buildAgentInput(text, from, history));
-  addMessage(convId, "assistant", resposta);
-
   const { cleanText, lead, closeReason } = processAgentResponse(resposta);
+  if (cleanText) {
+    addMessage(convId, "assistant", cleanText);
+  }
 
   // Resolve celular antes de qualquer envio: se for inválido / placeholder, pede o número.
   let resolvedCelular = null;
