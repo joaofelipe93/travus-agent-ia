@@ -187,7 +187,8 @@ export async function handleMessage(from, text, sock) {
     addMessage(convId, "assistant", cleanText);
   }
 
-  // Resolve celular antes de qualquer envio: se for inválido / placeholder, pede o número.
+  // Resolve celular: se for inválido / placeholder, suprimimos a confirmação
+  // (que assumiria fluxo fechado) e perguntamos o número. Não capturamos o lead.
   let resolvedCelular = null;
   if (lead) {
     resolvedCelular = resolveLeadCelular(lead, convId, from);
@@ -206,6 +207,7 @@ export async function handleMessage(from, text, sock) {
 
   if (cleanText) {
     await sendWithPresence(sock, from, cleanText);
+    addMessage(convId, "assistant", cleanText);
     console.log(`[AGENTE] → ${from}: ${cleanText.slice(0, 80)}${cleanText.length > 80 ? "…" : ""}`);
   }
 
