@@ -216,8 +216,7 @@ export async function handleMessage(from, text, sock) {
   if (lead) {
     try {
       recordLeadCapture(convId, lead);
-      markConversationScheduled(convId);
-      console.log(`[LEAD] capturado localmente: ${lead.nome} | ${lead.celular} (conversa marcada como agendada)`);
+      console.log(`[LEAD] capturado localmente: ${lead.nome} | ${lead.celular}`);
     } catch (dbErr) {
       console.error(`[LEAD] Erro ao gravar lead local: ${dbErr?.message ?? dbErr}`);
     }
@@ -242,6 +241,9 @@ export async function handleMessage(from, text, sock) {
     }
 
     if (calendarOk) {
+      markConversationScheduled(convId);
+      console.log(`[LEAD] conversa ${convId} marcada como agendada`);
+
       try {
         const { dealId, source } = await resolveDealIdForConnectionMove(convId, lead, piperunResp);
         if (dealId) {
