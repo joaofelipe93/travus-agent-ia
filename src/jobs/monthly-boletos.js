@@ -16,7 +16,7 @@ const STAGE_ID = Number(process.env.PIPERUN_BOLETOS_STAGE_ID ?? 679217);
 const PACING_MS = Number(process.env.BOLETOS_PACING_MS ?? 3000);
 const BILL_PACING_MS = Number(process.env.BOLETOS_BILL_PACING_MS ?? 1500);
 const DEFAULT_MESSAGE =
-  "Olá, {{primeiro_nome}}! {{anexo_label}} para garantir a sua participação na assembleia desse mês. 📄\n\nCaso já tenha pago, por favor, desconsiderar essa mensagem.\n\nVamos juntos! 🚀🚀🚀";
+  "Oi, {{primeiro_nome}}! 😊\n\nTô te mandando {{boletos_label}} desse mês 📄\n\nPagando até o vencimento, sua vaga na próxima assembleia segue garantida, você concorre normalmente na contemplação do mês.\nSe já tá quitado, é só ignorar. Qualquer dúvida, conta comigo!\n\nBora juntos! 🚀";
 
 function formatFirstName(fullName) {
   const raw = String(fullName ?? "").trim().split(/\s+/)[0] ?? "";
@@ -30,9 +30,11 @@ function pickPhone(person, deal) {
 
 function buildMessage(nome, count) {
   const template = process.env.BOLETOS_MESSAGE_TEMPLATE ?? DEFAULT_MESSAGE;
+  const boletosLabel = count === 1 ? "o boleto" : "os boletos";
   const anexoLabel = count === 1 ? "Anexo o boleto" : "Anexo os boletos";
   return template
     .replaceAll("{{primeiro_nome}}", formatFirstName(nome))
+    .replaceAll("{{boletos_label}}", boletosLabel)
     .replaceAll("{{anexo_label}}", anexoLabel);
 }
 
