@@ -15,19 +15,25 @@ import { sendWithPresence } from "../whatsapp/presence.js";
 const STAGE_ID = Number(process.env.PIPERUN_BOLETOS_STAGE_ID ?? 679217);
 const PACING_MS = Number(process.env.BOLETOS_PACING_MS ?? 3000);
 const BILL_PACING_MS = Number(process.env.BOLETOS_BILL_PACING_MS ?? 1500);
-const DEFAULT_MESSAGE = "Olá, {{primeiro_nome}}! Segue seu boleto do mês 📄\n\nQualquer dúvida estou à disposição.";
+const DEFAULT_MESSAGE =
+  "Olá, {{primeiro_nome}}! {{anexo_label}} para garantir a sua participação na assembleia desse mês. 📄\n\nCaso já tenha pago, por favor, desconsiderar essa mensagem.\n\nVamos juntos! 🚀🚀🚀";
 
-function firstName(fullName) {
-  return String(fullName ?? "").trim().split(/\s+/)[0] || "";
+function formatFirstName(fullName) {
+  const raw = String(fullName ?? "").trim().split(/\s+/)[0] ?? "";
+  if (!raw) return "";
+  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
 }
 
 function pickPhone(person, deal) {
   return extractPhoneFromPerson(person) ?? extractPhoneFromPerson(deal?.person);
 }
 
-function buildMessage(nome) {
+function buildMessage(nome, count) {
   const template = process.env.BOLETOS_MESSAGE_TEMPLATE ?? DEFAULT_MESSAGE;
-  return template.replaceAll("{{primeiro_nome}}", firstName(nome));
+  const anexoLabel = count === 1 ? "Anexo o boleto" : "Anexo os boletos";
+  return template
+    .replaceAll("{{primeiro_nome}}", formatFirstName(nome))
+    .replaceAll("{{anexo_label}}", anexoLabel);
 }
 
 function buildPdfFilename(parcelNumber, grupo, cota) {
@@ -108,10 +114,9 @@ async function processDeal(sock, deal) {
     return { ok: false, reason: "sem_cotas" };
   }
 
-  const message = buildMessage(nome);
-  let pdfsEnviados = 0;
   let alreadySent = 0;
   let difSkipped = 0;
+  const pendingBills = [];
 
   for (const cota of cotas) {
     const { CD_Grupo: grupo, CD_Cota: cotaCode, ID_Cota: idCota } = cota;
@@ -143,42 +148,59 @@ async function processDeal(sock, deal) {
         alreadySent += 1;
         continue;
       }
-
-      let pdfBuffer;
-      try {
-        pdfBuffer = await fetchOverdueBillPdf(grupo, cotaCode, billId, transactionId);
-      } catch (err) {
-        console.error(`[BOLETOS] deal ${dealId} bill ${billId} → erro fetchOverdueBillPdf: ${err?.message ?? err}`);
-        await sleep(BILL_PACING_MS);
-        continue;
-      }
-
-      const filename = buildPdfFilename(bill?.parcelNumber, grupo, cotaCode);
-
-      try {
-        if (pdfsEnviados === 0) {
-          await sendWithPresence(sock, jid, message);
-        }
-        await sock.sendMessage(jid, {
-          document: pdfBuffer,
-          mimetype: "application/pdf",
-          fileName: filename,
-        });
-        recordBoletoSent({
-          deal_id: dealId,
-          bill_id: billId,
-          parcel_number: bill?.parcelNumber,
-          group_code: grupo,
-          cota_code: cotaCode,
-          transaction_id: transactionId,
-        });
-        pdfsEnviados += 1;
-        console.log(`[BOLETOS] deal ${dealId} (${nome}) → boleto ${filename} enviado para ${jid}`);
-      } catch (err) {
-        console.error(`[BOLETOS] deal ${dealId} bill ${billId} → erro envio whatsapp: ${err?.message ?? err}`);
-      }
-      await sleep(BILL_PACING_MS);
+      pendingBills.push({ bill, billId, transactionId, grupo, cotaCode });
     }
+  }
+
+  let pdfsEnviados = 0;
+
+  if (pendingBills.length === 0) {
+    return {
+      ok: true,
+      pdfsEnviados,
+      alreadySent,
+      difSkipped,
+      reason: alreadySent === 0 ? "sem_bills" : null,
+    };
+  }
+
+  const message = buildMessage(nome, pendingBills.length);
+
+  for (const { bill, billId, transactionId, grupo, cotaCode } of pendingBills) {
+    let pdfBuffer;
+    try {
+      pdfBuffer = await fetchOverdueBillPdf(grupo, cotaCode, billId, transactionId);
+    } catch (err) {
+      console.error(`[BOLETOS] deal ${dealId} bill ${billId} → erro fetchOverdueBillPdf: ${err?.message ?? err}`);
+      await sleep(BILL_PACING_MS);
+      continue;
+    }
+
+    const filename = buildPdfFilename(bill?.parcelNumber, grupo, cotaCode);
+
+    try {
+      if (pdfsEnviados === 0) {
+        await sendWithPresence(sock, jid, message);
+      }
+      await sock.sendMessage(jid, {
+        document: pdfBuffer,
+        mimetype: "application/pdf",
+        fileName: filename,
+      });
+      recordBoletoSent({
+        deal_id: dealId,
+        bill_id: billId,
+        parcel_number: bill?.parcelNumber,
+        group_code: grupo,
+        cota_code: cotaCode,
+        transaction_id: transactionId,
+      });
+      pdfsEnviados += 1;
+      console.log(`[BOLETOS] deal ${dealId} (${nome}) → boleto ${filename} enviado para ${jid}`);
+    } catch (err) {
+      console.error(`[BOLETOS] deal ${dealId} bill ${billId} → erro envio whatsapp: ${err?.message ?? err}`);
+    }
+    await sleep(BILL_PACING_MS);
   }
 
   return {
