@@ -111,6 +111,7 @@ async function processDeal(sock, deal) {
   const message = buildMessage(nome);
   let pdfsEnviados = 0;
   let alreadySent = 0;
+  let difSkipped = 0;
 
   for (const cota of cotas) {
     const { CD_Grupo: grupo, CD_Cota: cotaCode, ID_Cota: idCota } = cota;
@@ -132,6 +133,10 @@ async function processDeal(sock, deal) {
       const transactionId = bill?.transactionId;
       if (!billId || !transactionId) {
         console.warn(`[BOLETOS] deal ${dealId} bill incompleto: ${JSON.stringify(bill)}`);
+        continue;
+      }
+      if (bill?.parcelNumber === "DIF") {
+        difSkipped += 1;
         continue;
       }
       if (hasBoletoBeenSent(dealId, billId)) {
@@ -180,6 +185,7 @@ async function processDeal(sock, deal) {
     ok: true,
     pdfsEnviados,
     alreadySent,
+    difSkipped,
     reason: pdfsEnviados === 0 && alreadySent === 0 ? "sem_bills" : null,
   };
 }
@@ -209,6 +215,7 @@ export async function runMonthlyBoletos(sock) {
     total: deals.length,
     ok: 0,
     pdfs_enviados: 0,
+    dif_pulados: 0,
     sem_cpf: 0,
     sem_telefone: 0,
     fora_do_whatsapp: 0,
@@ -223,6 +230,7 @@ export async function runMonthlyBoletos(sock) {
       if (result.ok) {
         summary.ok += 1;
         summary.pdfs_enviados += result.pdfsEnviados ?? 0;
+        summary.dif_pulados += result.difSkipped ?? 0;
         if (result.reason === "sem_bills") summary.sem_bills += 1;
       } else {
         const bucket = result.reason in summary ? result.reason : "erros";
