@@ -87,6 +87,21 @@ db.exec(`
     UNIQUE(deal_id, bill_id)
   );
 
+  CREATE TABLE IF NOT EXISTS boletos_emitidos (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    deal_id             TEXT    NOT NULL UNIQUE,
+    person_id           TEXT,
+    codigo_solicitacao  TEXT,
+    seu_numero          TEXT,
+    valor_nominal       REAL,
+    data_vencimento     TEXT,
+    linha_digitavel     TEXT,
+    pix_copia_e_cola    TEXT,
+    pdf_sent            INTEGER NOT NULL DEFAULT 0,
+    error               TEXT,
+    created_at          INTEGER NOT NULL DEFAULT (unixepoch())
+  );
+
   CREATE TABLE IF NOT EXISTS webhook_dispatches (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     person_id     TEXT    NOT NULL,
@@ -372,6 +387,55 @@ export function hasBoletoBeenSent(dealId, billId) {
   const row = db.prepare(
     "SELECT 1 FROM boletos_sent WHERE deal_id = ? AND bill_id = ?"
   ).get(String(dealId), String(billId));
+  return !!row;
+}
+
+export function recordBoletoEmitido({
+  deal_id,
+  person_id,
+  codigo_solicitacao,
+  seu_numero,
+  valor_nominal,
+  data_vencimento,
+  linha_digitavel,
+  pix_copia_e_cola,
+}) {
+  const result = db.prepare(`
+    INSERT OR IGNORE INTO boletos_emitidos
+      (deal_id, person_id, codigo_solicitacao, seu_numero, valor_nominal,
+       data_vencimento, linha_digitavel, pix_copia_e_cola)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    String(deal_id),
+    person_id ? String(person_id) : null,
+    codigo_solicitacao ?? null,
+    seu_numero ?? null,
+    valor_nominal ?? null,
+    data_vencimento ?? null,
+    linha_digitavel ?? null,
+    pix_copia_e_cola ?? null
+  );
+  return result.changes > 0;
+}
+
+export function markBoletoEmitidoPdfSent(dealId) {
+  db.prepare(
+    "UPDATE boletos_emitidos SET pdf_sent = 1 WHERE deal_id = ?"
+  ).run(String(dealId));
+}
+
+export function recordBoletoEmitidoError(dealId, error) {
+  db.prepare(`
+    INSERT INTO boletos_emitidos (deal_id, error)
+    VALUES (?, ?)
+    ON CONFLICT(deal_id) DO UPDATE SET error = excluded.error
+  `).run(String(dealId), String(error ?? "").slice(0, 500));
+}
+
+export function hasBoletoEmitido(dealId) {
+  const row = db.prepare(
+    "SELECT 1 FROM boletos_emitidos WHERE deal_id = ? AND pdf_sent = 1"
+  ).get(String(dealId));
   return !!row;
 }
 
