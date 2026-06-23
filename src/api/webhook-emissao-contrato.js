@@ -21,12 +21,12 @@ const CONSULTOR_WHATSAPP = process.env.CONSULTOR_WHATSAPP ?? null;
 const COBRANCA_DELAY_MS = Number(process.env.INTER_COBRANCA_DELAY_MS ?? 500);
 const PDF_DELAY_MS = Number(process.env.INTER_PDF_DELAY_MS ?? 1500);
 
-// Vencimentos: parcela 1 em emissão + 1 dia; demais espaçadas de 32 dias.
+// Vencimentos: parcela 1 em emissão + N dias; demais mantêm o mesmo dia do mês
+// da parcela 1, avançando 1 mês a cada parcela.
 const VENC_PRIMEIRA_DIAS = Number(process.env.INTER_CONTRATO_VENC_PRIMEIRA_DIAS ?? 1);
-const VENC_INTERVALO_DIAS = Number(process.env.INTER_CONTRATO_VENC_INTERVALO_DIAS ?? 32);
 
 const DEFAULT_CLIENT_MESSAGE =
-  "Oi, {{primeiro_nome}}! 😊\n\nSegue o(s) boleto(s) da consultoria: {{total_parcelas}}x de R$ {{valor}} 📄\n\nA primeira parcela vence amanhã. As demais a cada 32 dias.\n\nQualquer dúvida, conta comigo!";
+  "Oi, {{primeiro_nome}}! 😊\n\nSegue o(s) boleto(s) da consultoria: {{total_parcelas}}x de R$ {{valor}} 📄\n\nA primeira parcela vence amanhã. As demais, no mesmo dia dos próximos meses.\n\nQualquer dúvida, conta comigo!";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -81,6 +81,32 @@ function splitDddPhone(phone) {
 function vencimentoAt(daysFromNow) {
   const d = new Date(Date.now() + daysFromNow * 86400_000);
   return d.toISOString().slice(0, 10);
+}
+
+function formatYmd(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+// Vencimento da parcela N (1-indexed):
+// - N=1: emissão + VENC_PRIMEIRA_DIAS (default 1 dia).
+// - N>1: mesmo dia do mês da parcela 1, avançando (N-1) meses.
+//   Se o mês alvo não tem o dia (ex: dia 31 → fev), usa último dia do mês.
+function vencimentoParcela(emissao, parcelaN) {
+  const base = new Date(emissao);
+  base.setDate(base.getDate() + VENC_PRIMEIRA_DIAS); // = vencimento da P1
+  if (parcelaN === 1) return formatYmd(base);
+
+  const day = base.getDate();
+  const targetMonth = base.getMonth() + (parcelaN - 1);
+  const targetYear = base.getFullYear() + Math.floor(targetMonth / 12);
+  const monthInYear = ((targetMonth % 12) + 12) % 12;
+  // Último dia do mês alvo: dia 0 do mês seguinte
+  const lastDay = new Date(targetYear, monthInYear + 1, 0).getDate();
+  const safeDay = Math.min(day, lastDay);
+  return formatYmd(new Date(targetYear, monthInYear, safeDay));
 }
 
 function buildSeuNumero(dealId, parcelaN) {
@@ -244,9 +270,9 @@ export async function emissaoContratoWebhookHandler(req, res) {
 
   // Loop de emissão: cria todas as cobranças na Inter
   const emitidas = [];
+  const emissao = new Date();
   for (let n = 1; n <= parcelas; n++) {
-    const diasAteVencer = VENC_PRIMEIRA_DIAS + VENC_INTERVALO_DIAS * (n - 1);
-    const vencimento = vencimentoAt(diasAteVencer);
+    const vencimento = vencimentoParcela(emissao, n);
     const interPayload = buildPayloadParcela({ dealId, person, parcelaN: n, valor, vencimento });
     try {
       const cobranca = await createCobranca(interPayload);
