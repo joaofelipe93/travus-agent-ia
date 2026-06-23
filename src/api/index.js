@@ -1,6 +1,7 @@
 import express from "express";
 import { piperunWebhookHandler } from "./webhook-piperun.js";
 import { novoClienteWebhookHandler } from "./webhook-novo-cliente.js";
+import { emissaoContratoWebhookHandler } from "./webhook-emissao-contrato.js";
 
 let currentSock = null;
 let started = false;
@@ -26,6 +27,7 @@ export function startApi() {
 
   app.post("/webhook/piperun", piperunWebhookHandler);
   app.post("/webhook/piperun/novo-cliente", novoClienteWebhookHandler);
+  app.post("/webhook/piperun/emissao-contrato", emissaoContratoWebhookHandler);
 
   const port = Number(process.env.API_PORT ?? 3000);
   app.listen(port, () => {
