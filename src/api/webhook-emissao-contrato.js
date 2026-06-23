@@ -196,7 +196,15 @@ export async function emissaoContratoWebhookHandler(req, res) {
   const personId = payload?.person?.id;
   const person = payload?.person;
   const nome = person?.name ?? "(sem nome)";
-  const observation = payload?.observation;
+  // Procura o valor em múltiplos campos. Piperun pode ter:
+  //   - payload.person.observation (campo "Observação" da pessoa, editável pelo consultor)
+  //   - payload.observation (geralmente log automático: "15:50 ... Integração: ...")
+  //   - payload.description (similar ao observation do deal)
+  const observationCandidates = [
+    { fonte: "person.observation", texto: payload?.person?.observation },
+    { fonte: "deal.observation", texto: payload?.observation },
+    { fonte: "deal.description", texto: payload?.description },
+  ];
 
   if (!dealId || !stageId || !personId) {
     console.warn("[CONTRATO] payload sem id/stage.id/person.id, ignorando");
@@ -220,15 +228,28 @@ export async function emissaoContratoWebhookHandler(req, res) {
     return res.status(503).json({ error: "whatsapp not connected" });
   }
 
-  // Parsing do observation pra extrair valor e parcelas
-  const parsed = parseObservation(observation);
+  // Parsing: tenta cada campo na ordem; usa o primeiro que casar com o regex
+  let parsed = null;
+  let observationFonte = null;
+  for (const { fonte, texto } of observationCandidates) {
+    const result = parseObservation(texto);
+    if (result) {
+      parsed = result;
+      observationFonte = fonte;
+      break;
+    }
+  }
   if (!parsed) {
-    const msg = `[ALERTA] Lead "${nome}" (deal ${dealId}): não consegui ler o valor do contrato no campo Observação. Formato esperado: "R$XXX xNN" (ex: "R$300 x12"). Conteúdo atual: ${observation ? `"${String(observation).slice(0, 200)}"` : "vazio"}`;
+    const conteudos = observationCandidates
+      .map(({ fonte, texto }) => `${fonte}=${texto ? `"${String(texto).slice(0, 100)}"` : "vazio"}`)
+      .join(" | ");
+    const msg = `[ALERTA] Lead "${nome}" (deal ${dealId}): não consegui ler o valor do contrato. Formato esperado: "R$XXX xNN" (ex: "R$300 x12"). Campos checados: ${conteudos}`;
     console.warn(`[CONTRATO] ${msg}`);
     await notifyConsultor(sock, msg);
     return res.status(200).json({ status: "invalid_observation" });
   }
   const { valor, parcelas } = parsed;
+  console.log(`[CONTRATO] deal ${dealId} → valor lido de ${observationFonte}: ${parcelas}x R$ ${valor}`);
 
   // Validação do pagador (CPF, endereço)
   const missing = validatePagador(person);
