@@ -38,7 +38,9 @@ const payload = {
   seuNumero,
   valorNominal: valor,
   dataVencimento: venc,
-  numDiasAgenda: 0,
+  // > 0 é obrigatório quando há multa/mora — define quantos dias pós-vencimento
+  // o boleto continua aceitando pagamento (com encargos aplicados).
+  numDiasAgenda: 60,
   pagador: {
     cpfCnpj: cpf.replace(/\D/g, ""),
     tipoPessoa: "FISICA",
