@@ -27,9 +27,10 @@ function arg(name, fallback) {
 }
 
 const cpf = arg("cpf", "12345678909");
-const valor = Number(arg("valor", "1.00"));
+const valor = Number(arg("valor", "2.50"));
 const nome = arg("nome", "Cliente Teste Travus");
-const seuNumero = `TESTE-${Date.now().toString().slice(-10)}`;
+// seuNumero precisa ter ≤ 15 chars (validação da Inter).
+const seuNumero = `T${Date.now().toString().slice(-13)}`;
 
 const venc = new Date(Date.now() + 5 * 86400_000).toISOString().slice(0, 10);
 
