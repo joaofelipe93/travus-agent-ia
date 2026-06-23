@@ -13,6 +13,7 @@ import {
 import { sendWithPresence } from "../whatsapp/presence.js";
 import { getSock } from "./index.js";
 import { createCobranca, getBoletoPdf } from "../integrations/inter.js";
+import { renderContrato } from "../integrations/contrato-template.js";
 
 const TRIGGER_STAGE_ID = Number(process.env.INTER_CONTRATO_STAGE_ID ?? 654265);
 const MULTA_PCT = Number(process.env.INTER_CONTRATO_MULTA_PCT ?? 2);
@@ -26,7 +27,7 @@ const PDF_DELAY_MS = Number(process.env.INTER_PDF_DELAY_MS ?? 1500);
 const VENC_PRIMEIRA_DIAS = Number(process.env.INTER_CONTRATO_VENC_PRIMEIRA_DIAS ?? 1);
 
 const DEFAULT_CLIENT_MESSAGE =
-  "Oi, {{primeiro_nome}}! 😊\n\nSegue o(s) boleto(s) da consultoria: {{total_parcelas}}x de R$ {{valor}} 📄\n\nA primeira parcela vence amanhã. As demais, no mesmo dia dos próximos meses.\n\nQualquer dúvida, conta comigo!";
+  "Oi, {{primeiro_nome}}! 😊\n\nSegue o seu contrato de consultoria e os boletos: {{total_parcelas}}x de R$ {{valor}} 📄\n\nA primeira parcela vence amanhã. As demais, no mesmo dia dos próximos meses.\n\nQualquer dúvida, conta comigo!";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -336,10 +337,38 @@ export async function emissaoContratoWebhookHandler(req, res) {
     await sleep(PDF_DELAY_MS);
   }
 
-  // Envia mensagem + todos os PDFs
+  // Renderiza o contrato antes de enviar (falhar aqui aborta o envio dos boletos
+  // também, pra evitar cliente receber só a parte de pagamento sem o documento).
+  let contratoBuffer;
+  try {
+    contratoBuffer = renderContrato({
+      person,
+      valor,
+      parcelas,
+      vencimentos: emitidas.map((e) => e.vencimento),
+    });
+    console.log(`[CONTRATO] deal ${dealId} → contrato .docx renderizado (${contratoBuffer.length} bytes)`);
+  } catch (err) {
+    const msg = `[ERRO] Lead "${nome}" (deal ${dealId}): boletos emitidos na Inter mas falhou render do contrato: ${err?.message ?? err}. Cancela os ${parcelas} boletos no painel Inter antes de retentar.`;
+    console.error(`[CONTRATO] ${msg}`);
+    await notifyConsultor(sock, msg);
+    return res.status(500).json({ error: "contrato render failed" });
+  }
+
+  // Envia: mensagem → contrato → todos os boletos
   const clientMessage = buildClientMessage(nome, parcelas, valor);
+  const contratoFilename = `Contrato de Consultoria - ${titleCase(nome)}.docx`;
   try {
     await sendWithPresence(sock, jid, clientMessage);
+
+    await sock.sendMessage(jid, {
+      document: contratoBuffer,
+      mimetype: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      fileName: contratoFilename,
+    });
+    console.log(`[CONTRATO] deal ${dealId} (${nome}) → contrato enviado`);
+    await sleep(PDF_DELAY_MS);
+
     for (const { n, pdf, seuNumero } of pdfs) {
       const filename = `Boleto Travus ${titleCase(nome)} - parcela ${String(n).padStart(2, "0")} de ${String(parcelas).padStart(2, "0")}.pdf`;
       await sock.sendMessage(jid, {
@@ -359,7 +388,7 @@ export async function emissaoContratoWebhookHandler(req, res) {
       console.warn(`[CONTRATO] não foi possível persistir msg local: ${err?.message ?? err}`);
     }
 
-    console.log(`[CONTRATO] deal ${dealId} (${nome}) → todos os ${parcelas} boletos entregues para ${jid}`);
+    console.log(`[CONTRATO] deal ${dealId} (${nome}) → contrato + ${parcelas} boletos entregues para ${jid}`);
   } catch (err) {
     const msg = `[ERRO] Lead "${nome}" (deal ${dealId}): boletos emitidos mas falhou envio no WhatsApp: ${err?.message ?? err}`;
     console.error(`[CONTRATO] ${msg}`);
