@@ -102,6 +102,24 @@ db.exec(`
     created_at          INTEGER NOT NULL DEFAULT (unixepoch())
   );
 
+  CREATE TABLE IF NOT EXISTS boletos_contrato_parcelas (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    deal_id             TEXT    NOT NULL,
+    parcela_n           INTEGER NOT NULL,
+    total_parcelas      INTEGER NOT NULL,
+    codigo_solicitacao  TEXT,
+    seu_numero          TEXT,
+    valor_nominal       REAL,
+    data_vencimento     TEXT,
+    linha_digitavel     TEXT,
+    pix_copia_e_cola    TEXT,
+    pdf_sent            INTEGER NOT NULL DEFAULT 0,
+    error               TEXT,
+    created_at          INTEGER NOT NULL DEFAULT (unixepoch()),
+    UNIQUE(deal_id, parcela_n)
+  );
+  CREATE INDEX IF NOT EXISTS idx_contrato_parcelas_deal ON boletos_contrato_parcelas(deal_id);
+
   CREATE TABLE IF NOT EXISTS webhook_dispatches (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     person_id     TEXT    NOT NULL,
@@ -388,6 +406,55 @@ export function hasBoletoBeenSent(dealId, billId) {
     "SELECT 1 FROM boletos_sent WHERE deal_id = ? AND bill_id = ?"
   ).get(String(dealId), String(billId));
   return !!row;
+}
+
+export function recordContratoParcela({
+  deal_id,
+  parcela_n,
+  total_parcelas,
+  codigo_solicitacao,
+  seu_numero,
+  valor_nominal,
+  data_vencimento,
+  linha_digitavel,
+  pix_copia_e_cola,
+}) {
+  const result = db.prepare(`
+    INSERT OR IGNORE INTO boletos_contrato_parcelas
+      (deal_id, parcela_n, total_parcelas, codigo_solicitacao, seu_numero,
+       valor_nominal, data_vencimento, linha_digitavel, pix_copia_e_cola)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    String(deal_id),
+    Number(parcela_n),
+    Number(total_parcelas),
+    codigo_solicitacao ?? null,
+    seu_numero ?? null,
+    valor_nominal ?? null,
+    data_vencimento ?? null,
+    linha_digitavel ?? null,
+    pix_copia_e_cola ?? null
+  );
+  return result.changes > 0;
+}
+
+export function markContratoParcelaPdfSent(dealId, parcelaN) {
+  db.prepare(
+    "UPDATE boletos_contrato_parcelas SET pdf_sent = 1 WHERE deal_id = ? AND parcela_n = ?"
+  ).run(String(dealId), Number(parcelaN));
+}
+
+export function countContratoParcelas(dealId) {
+  const row = db.prepare(
+    "SELECT COUNT(*) AS n FROM boletos_contrato_parcelas WHERE deal_id = ?"
+  ).get(String(dealId));
+  return row?.n ?? 0;
+}
+
+export function getContratoParcelas(dealId) {
+  return db.prepare(
+    "SELECT * FROM boletos_contrato_parcelas WHERE deal_id = ? ORDER BY parcela_n ASC"
+  ).all(String(dealId));
 }
 
 export function recordBoletoEmitido({
