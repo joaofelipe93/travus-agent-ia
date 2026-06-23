@@ -11,7 +11,7 @@ import { sendWithPresence } from "../whatsapp/presence.js";
 import { saudacaoBrasilia } from "../utils/saudacao.js";
 import { getSock } from "./index.js";
 
-const PDF_PATH = process.env.WEBHOOK_PDF_PATH ?? "assets/material.pdf";
+const PDF_PATH = process.env.WEBHOOK_PDF_PATH ?? "src/assets/material.pdf";
 const PDF_FILENAME = process.env.WEBHOOK_PDF_FILENAME ?? "Travus Capital.pdf";
 
 function firstName(fullName) {
