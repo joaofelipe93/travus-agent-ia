@@ -12,6 +12,7 @@
     "test:agent": "node scripts/test-agent.js",
     "backup:db": "node scripts/backup-db.mjs",
     "boletos:run": "node scripts/run-boletos-now.js",
+    "inter:test": "node scripts/test-inter.js",
     "dev": "node src/index.js"
   },
   "dependencies": {
