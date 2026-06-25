@@ -29,6 +29,18 @@ const VENC_PRIMEIRA_DIAS = Number(process.env.INTER_CONTRATO_VENC_PRIMEIRA_DIAS 
 const DEFAULT_CLIENT_MESSAGE =
   "Oi, {{primeiro_nome}}! 😊\n\nSegue o seu contrato de consultoria e os boletos: {{total_parcelas}}x de R$ {{valor}} 📄\n\nA primeira parcela vence amanhã. As demais, no mesmo dia dos próximos meses.\n\nQualquer dúvida, conta comigo!";
 
+const DEFAULT_CLIENT_MESSAGE_CORTESIA =
+  "Oi, {{primeiro_nome}}! 😊\n\nSegue o seu contrato de consultoria 📄\n\nQualquer dúvida, conta comigo!";
+
+// Marcador que o consultor coloca no campo "Observação" da pessoa no Piperun
+// pra sinalizar que esse contrato é de cortesia (sem cobrança / sem boletos).
+const CORTESIA_REGEX = /sem\s+cobran[cç]a/i;
+
+export function parseCortesia(text) {
+  if (!text) return false;
+  return CORTESIA_REGEX.test(String(text));
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function firstName(fullName) {
@@ -51,6 +63,11 @@ function buildClientMessage(nome, totalParcelas, valor) {
     .replaceAll("{{primeiro_nome}}", titleCase(nome))
     .replaceAll("{{total_parcelas}}", String(totalParcelas))
     .replaceAll("{{valor}}", formatBrl(valor));
+}
+
+function buildClientMessageCortesia(nome) {
+  const template = process.env.CONTRATO_MESSAGE_TEMPLATE_CORTESIA ?? DEFAULT_CLIENT_MESSAGE_CORTESIA;
+  return template.replaceAll("{{primeiro_nome}}", titleCase(nome));
 }
 
 function pickPhone(person) {
@@ -229,28 +246,40 @@ export async function emissaoContratoWebhookHandler(req, res) {
     return res.status(503).json({ error: "whatsapp not connected" });
   }
 
-  // Parsing: tenta cada campo na ordem; usa o primeiro que casar com o regex
-  let parsed = null;
-  let observationFonte = null;
-  for (const { fonte, texto } of observationCandidates) {
-    const result = parseObservation(texto);
-    if (result) {
-      parsed = result;
-      observationFonte = fonte;
-      break;
+  // Modo cortesia: detecta "Sem cobrança" em qualquer um dos campos. Tem
+  // prioridade sobre o parse de valor — vai pro fluxo de só-contrato.
+  const cortesiaFonte = observationCandidates.find((c) => parseCortesia(c.texto));
+  const cortesia = !!cortesiaFonte;
+
+  let valor = null;
+  let parcelas = null;
+  if (!cortesia) {
+    // Parsing: tenta cada campo na ordem; usa o primeiro que casar com o regex
+    let parsed = null;
+    let observationFonte = null;
+    for (const { fonte, texto } of observationCandidates) {
+      const result = parseObservation(texto);
+      if (result) {
+        parsed = result;
+        observationFonte = fonte;
+        break;
+      }
     }
+    if (!parsed) {
+      const conteudos = observationCandidates
+        .map(({ fonte, texto }) => `${fonte}=${texto ? `"${String(texto).slice(0, 100)}"` : "vazio"}`)
+        .join(" | ");
+      const msg = `[ALERTA] Lead "${nome}" (deal ${dealId}): não consegui ler o valor do contrato. Formato esperado: "R$XXX xNN" (ex: "R$300 x12") ou "Sem cobrança" pra contrato sem boleto. Campos checados: ${conteudos}`;
+      console.warn(`[CONTRATO] ${msg}`);
+      await notifyConsultor(sock, msg);
+      return res.status(200).json({ status: "invalid_observation" });
+    }
+    valor = parsed.valor;
+    parcelas = parsed.parcelas;
+    console.log(`[CONTRATO] deal ${dealId} → valor lido de ${observationFonte}: ${parcelas}x R$ ${valor}`);
+  } else {
+    console.log(`[CONTRATO] deal ${dealId} → modo CORTESIA (sem boleto) detectado em ${cortesiaFonte.fonte}`);
   }
-  if (!parsed) {
-    const conteudos = observationCandidates
-      .map(({ fonte, texto }) => `${fonte}=${texto ? `"${String(texto).slice(0, 100)}"` : "vazio"}`)
-      .join(" | ");
-    const msg = `[ALERTA] Lead "${nome}" (deal ${dealId}): não consegui ler o valor do contrato. Formato esperado: "R$XXX xNN" (ex: "R$300 x12"). Campos checados: ${conteudos}`;
-    console.warn(`[CONTRATO] ${msg}`);
-    await notifyConsultor(sock, msg);
-    return res.status(200).json({ status: "invalid_observation" });
-  }
-  const { valor, parcelas } = parsed;
-  console.log(`[CONTRATO] deal ${dealId} → valor lido de ${observationFonte}: ${parcelas}x R$ ${valor}`);
 
   // Validação do pagador (CPF, endereço)
   const missing = validatePagador(person);
@@ -288,78 +317,74 @@ export async function emissaoContratoWebhookHandler(req, res) {
   ensureContact(canonicalPhone, jid);
   recordWebhookDispatch(personId, stageId, jid, canonicalPhone);
 
-  console.log(`[CONTRATO] deal ${dealId} (${nome}) → emitindo ${parcelas}x R$ ${formatBrl(valor)}`);
-
-  // Loop de emissão: cria todas as cobranças na Inter
   const emitidas = [];
-  const emissao = new Date();
-  for (let n = 1; n <= parcelas; n++) {
-    const vencimento = vencimentoParcela(emissao, n);
-    const interPayload = buildPayloadParcela({ dealId, person, parcelaN: n, valor, vencimento });
-    try {
-      const cobranca = await createCobranca(interPayload);
-      const codigo = cobranca?.codigoSolicitacao;
-      recordContratoParcela({
-        deal_id: dealId,
-        parcela_n: n,
-        total_parcelas: parcelas,
-        codigo_solicitacao: codigo,
-        seu_numero: interPayload.seuNumero,
-        valor_nominal: valor,
-        data_vencimento: vencimento,
-      });
-      emitidas.push({ n, codigo, seuNumero: interPayload.seuNumero, vencimento });
-      console.log(`[CONTRATO] deal ${dealId} → parcela ${n}/${parcelas} emitida (codigo=${codigo}, vence ${vencimento})`);
-    } catch (err) {
-      const msg = `[ERRO] Lead "${nome}" (deal ${dealId}): falha ao emitir parcela ${n}/${parcelas}: ${err?.message ?? err}. ${emitidas.length} parcelas anteriores foram emitidas e podem ser canceladas pelo painel Inter.`;
-      console.error(`[CONTRATO] ${msg}`);
-      await notifyConsultor(sock, msg);
-      return res.status(502).json({ error: "inter create failed", parcela_falha: n, parcelas_emitidas: emitidas.length });
-    }
-    if (n < parcelas) await sleep(COBRANCA_DELAY_MS);
-  }
-
-  // Aguarda Inter disponibilizar os PDFs
-  await sleep(2000);
-
-  // Baixa todos os PDFs antes de mandar (falhar em algum não deixa o cliente com lista parcial)
   const pdfs = [];
-  for (const { n, codigo, seuNumero } of emitidas) {
-    try {
-      const pdf = await getBoletoPdf(codigo);
-      pdfs.push({ n, codigo, seuNumero, pdf });
-    } catch (err) {
-      const msg = `[ERRO] Lead "${nome}" (deal ${dealId}): falha ao baixar PDF da parcela ${n}/${parcelas} (codigo=${codigo}): ${err?.message ?? err}`;
-      console.error(`[CONTRATO] ${msg}`);
-      await notifyConsultor(sock, msg);
-      return res.status(502).json({ error: "inter pdf failed", parcela_falha: n });
+
+  if (!cortesia) {
+    console.log(`[CONTRATO] deal ${dealId} (${nome}) → emitindo ${parcelas}x R$ ${formatBrl(valor)}`);
+
+    // Loop de emissão: cria todas as cobranças na Inter
+    const emissao = new Date();
+    for (let n = 1; n <= parcelas; n++) {
+      const vencimento = vencimentoParcela(emissao, n);
+      const interPayload = buildPayloadParcela({ dealId, person, parcelaN: n, valor, vencimento });
+      try {
+        const cobranca = await createCobranca(interPayload);
+        const codigo = cobranca?.codigoSolicitacao;
+        recordContratoParcela({
+          deal_id: dealId,
+          parcela_n: n,
+          total_parcelas: parcelas,
+          codigo_solicitacao: codigo,
+          seu_numero: interPayload.seuNumero,
+          valor_nominal: valor,
+          data_vencimento: vencimento,
+        });
+        emitidas.push({ n, codigo, seuNumero: interPayload.seuNumero, vencimento });
+        console.log(`[CONTRATO] deal ${dealId} → parcela ${n}/${parcelas} emitida (codigo=${codigo}, vence ${vencimento})`);
+      } catch (err) {
+        const msg = `[ERRO] Lead "${nome}" (deal ${dealId}): falha ao emitir parcela ${n}/${parcelas}: ${err?.message ?? err}. ${emitidas.length} parcelas anteriores foram emitidas e podem ser canceladas pelo painel Inter.`;
+        console.error(`[CONTRATO] ${msg}`);
+        await notifyConsultor(sock, msg);
+        return res.status(502).json({ error: "inter create failed", parcela_falha: n, parcelas_emitidas: emitidas.length });
+      }
+      if (n < parcelas) await sleep(COBRANCA_DELAY_MS);
     }
-    await sleep(PDF_DELAY_MS);
+
+    // Aguarda Inter disponibilizar os PDFs
+    await sleep(2000);
+
+    // Baixa todos os PDFs antes de mandar (falhar em algum não deixa o cliente com lista parcial)
+    for (const { n, codigo, seuNumero } of emitidas) {
+      try {
+        const pdf = await getBoletoPdf(codigo);
+        pdfs.push({ n, codigo, seuNumero, pdf });
+      } catch (err) {
+        const msg = `[ERRO] Lead "${nome}" (deal ${dealId}): falha ao baixar PDF da parcela ${n}/${parcelas} (codigo=${codigo}): ${err?.message ?? err}`;
+        console.error(`[CONTRATO] ${msg}`);
+        await notifyConsultor(sock, msg);
+        return res.status(502).json({ error: "inter pdf failed", parcela_falha: n });
+      }
+      await sleep(PDF_DELAY_MS);
+    }
   }
 
   // Renderiza o contrato. Tenta PDF primeiro (via LibreOffice headless).
   // Se falhar (libreoffice não instalado, crash do soffice, etc), fallback
   // pro .docx — alerta o consultor mas não bloqueia a entrega.
+  const renderParams = cortesia
+    ? { person, cortesia: true }
+    : { person, valor, parcelas, vencimentos: emitidas.map((e) => e.vencimento) };
   let contratoBuffer;
   let contratoExt = "pdf";
   let contratoMime = "application/pdf";
   try {
-    contratoBuffer = await renderContratoPdf({
-      person,
-      valor,
-      parcelas,
-      vencimentos: emitidas.map((e) => e.vencimento),
-    });
-    console.log(`[CONTRATO] deal ${dealId} → contrato PDF renderizado (${contratoBuffer.length} bytes)`);
+    contratoBuffer = await renderContratoPdf(renderParams);
+    console.log(`[CONTRATO] deal ${dealId} → contrato PDF renderizado${cortesia ? " (cortesia)" : ""} (${contratoBuffer.length} bytes)`);
   } catch (pdfErr) {
     console.warn(`[CONTRATO] deal ${dealId} → falha no PDF, tentando fallback .docx: ${pdfErr?.message ?? pdfErr}`);
     try {
-      contratoBuffer = renderContrato({
-        person,
-        valor,
-        parcelas,
-        vencimentos: emitidas.map((e) => e.vencimento),
-      });
+      contratoBuffer = renderContrato(renderParams);
       contratoExt = "docx";
       contratoMime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
       console.log(`[CONTRATO] deal ${dealId} → contrato .docx renderizado (fallback, ${contratoBuffer.length} bytes)`);
@@ -368,15 +393,20 @@ export async function emissaoContratoWebhookHandler(req, res) {
         `[ALERTA] Lead "${nome}" (deal ${dealId}): falha na conversão PDF do contrato — enviado como .docx. Erro: ${pdfErr?.message ?? pdfErr}`
       );
     } catch (docxErr) {
-      const msg = `[ERRO] Lead "${nome}" (deal ${dealId}): boletos emitidos na Inter mas falhou render do contrato (PDF e .docx). Cancela os ${parcelas} boletos no painel Inter antes de retentar. Erro: ${docxErr?.message ?? docxErr}`;
+      const sufixoErro = cortesia
+        ? "(modo cortesia, sem boletos)"
+        : `Cancela os ${parcelas} boletos no painel Inter antes de retentar.`;
+      const msg = `[ERRO] Lead "${nome}" (deal ${dealId}): falhou render do contrato (PDF e .docx). ${sufixoErro} Erro: ${docxErr?.message ?? docxErr}`;
       console.error(`[CONTRATO] ${msg}`);
       await notifyConsultor(sock, msg);
       return res.status(500).json({ error: "contrato render failed" });
     }
   }
 
-  // Envia: mensagem → contrato → todos os boletos
-  const clientMessage = buildClientMessage(nome, parcelas, valor);
+  // Envia: mensagem → contrato → (se aplicável) todos os boletos
+  const clientMessage = cortesia
+    ? buildClientMessageCortesia(nome)
+    : buildClientMessage(nome, parcelas, valor);
   const contratoFilename = `Contrato de Consultoria - ${titleCase(nome)}.${contratoExt}`;
   try {
     await sendWithPresence(sock, jid, clientMessage);
@@ -408,14 +438,21 @@ export async function emissaoContratoWebhookHandler(req, res) {
       console.warn(`[CONTRATO] não foi possível persistir msg local: ${err?.message ?? err}`);
     }
 
-    console.log(`[CONTRATO] deal ${dealId} (${nome}) → contrato + ${parcelas} boletos entregues para ${jid}`);
+    console.log(
+      cortesia
+        ? `[CONTRATO] deal ${dealId} (${nome}) → contrato cortesia entregue para ${jid}`
+        : `[CONTRATO] deal ${dealId} (${nome}) → contrato + ${parcelas} boletos entregues para ${jid}`
+    );
   } catch (err) {
-    const msg = `[ERRO] Lead "${nome}" (deal ${dealId}): boletos emitidos mas falhou envio no WhatsApp: ${err?.message ?? err}`;
+    const msg = `[ERRO] Lead "${nome}" (deal ${dealId}): falhou envio no WhatsApp: ${err?.message ?? err}`;
     console.error(`[CONTRATO] ${msg}`);
     await notifyConsultor(sock, msg);
     return res.status(502).json({ error: "whatsapp send failed" });
   }
 
+  if (cortesia) {
+    return res.status(202).json({ status: "sent", deal_id: dealId, modo: "cortesia" });
+  }
   return res.status(202).json({
     status: "sent",
     deal_id: dealId,
