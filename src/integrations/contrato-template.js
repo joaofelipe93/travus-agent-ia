@@ -1,7 +1,11 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { promisify } from "node:util";
 import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
+import libre from "libreoffice-convert";
+
+const convertAsync = promisify(libre.convert);
 
 const TEMPLATE_PATH = process.env.CONTRATO_TEMPLATE_PATH ?? "src/assets/contrato-template.docx";
 
@@ -119,6 +123,32 @@ export function renderContrato({ person, valor, parcelas, vencimentos, dataAssin
   });
 
   return doc.getZip().generate({ type: "nodebuffer" });
+}
+
+/**
+ * Renderiza o contrato e converte pra PDF via LibreOffice headless.
+ * Requer libreoffice instalado no sistema (sudo apt install libreoffice).
+ *
+ * @param {object} params — mesma assinatura de renderContrato
+ * @returns {Promise<Buffer>} buffer do PDF
+ */
+export async function renderContratoPdf(params) {
+  const docxBuffer = renderContrato(params);
+  try {
+    const pdfBuffer = await convertAsync(docxBuffer, ".pdf", undefined);
+    if (!pdfBuffer || pdfBuffer.length < 100) {
+      throw new Error(`PDF gerado vazio/inválido (${pdfBuffer?.length ?? 0} bytes)`);
+    }
+    if (pdfBuffer.slice(0, 4).toString("ascii") !== "%PDF") {
+      throw new Error("PDF gerado sem magic bytes %PDF — libreoffice falhou silenciosamente");
+    }
+    return pdfBuffer;
+  } catch (err) {
+    const msg = err?.message ?? String(err);
+    throw new Error(
+      `Falha ao converter contrato .docx → PDF (libreoffice instalado e acessível?): ${msg}`
+    );
+  }
 }
 
 // Exportados pra teste isolado / reuso

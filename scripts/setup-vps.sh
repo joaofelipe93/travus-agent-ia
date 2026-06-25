@@ -12,6 +12,9 @@ apt-get update -qq && apt-get upgrade -y -qq
 echo "==> Instalando dependências do sistema..."
 apt-get install -y -qq curl git
 
+echo "==> Instalando LibreOffice headless (pra conversão .docx → PDF dos contratos)..."
+apt-get install -y --no-install-recommends libreoffice
+
 echo "==> Instalando Node.js 22 via NodeSource..."
 curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
 apt-get install -y nodejs

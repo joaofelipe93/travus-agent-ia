@@ -13,7 +13,7 @@ import {
 import { sendWithPresence } from "../whatsapp/presence.js";
 import { getSock } from "./index.js";
 import { createCobranca, getBoletoPdf } from "../integrations/inter.js";
-import { renderContrato } from "../integrations/contrato-template.js";
+import { renderContrato, renderContratoPdf } from "../integrations/contrato-template.js";
 
 const TRIGGER_STAGE_ID = Number(process.env.INTER_CONTRATO_STAGE_ID ?? 654265);
 const MULTA_PCT = Number(process.env.INTER_CONTRATO_MULTA_PCT ?? 2);
@@ -337,33 +337,53 @@ export async function emissaoContratoWebhookHandler(req, res) {
     await sleep(PDF_DELAY_MS);
   }
 
-  // Renderiza o contrato antes de enviar (falhar aqui aborta o envio dos boletos
-  // também, pra evitar cliente receber só a parte de pagamento sem o documento).
+  // Renderiza o contrato. Tenta PDF primeiro (via LibreOffice headless).
+  // Se falhar (libreoffice não instalado, crash do soffice, etc), fallback
+  // pro .docx — alerta o consultor mas não bloqueia a entrega.
   let contratoBuffer;
+  let contratoExt = "pdf";
+  let contratoMime = "application/pdf";
   try {
-    contratoBuffer = renderContrato({
+    contratoBuffer = await renderContratoPdf({
       person,
       valor,
       parcelas,
       vencimentos: emitidas.map((e) => e.vencimento),
     });
-    console.log(`[CONTRATO] deal ${dealId} → contrato .docx renderizado (${contratoBuffer.length} bytes)`);
-  } catch (err) {
-    const msg = `[ERRO] Lead "${nome}" (deal ${dealId}): boletos emitidos na Inter mas falhou render do contrato: ${err?.message ?? err}. Cancela os ${parcelas} boletos no painel Inter antes de retentar.`;
-    console.error(`[CONTRATO] ${msg}`);
-    await notifyConsultor(sock, msg);
-    return res.status(500).json({ error: "contrato render failed" });
+    console.log(`[CONTRATO] deal ${dealId} → contrato PDF renderizado (${contratoBuffer.length} bytes)`);
+  } catch (pdfErr) {
+    console.warn(`[CONTRATO] deal ${dealId} → falha no PDF, tentando fallback .docx: ${pdfErr?.message ?? pdfErr}`);
+    try {
+      contratoBuffer = renderContrato({
+        person,
+        valor,
+        parcelas,
+        vencimentos: emitidas.map((e) => e.vencimento),
+      });
+      contratoExt = "docx";
+      contratoMime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+      console.log(`[CONTRATO] deal ${dealId} → contrato .docx renderizado (fallback, ${contratoBuffer.length} bytes)`);
+      await notifyConsultor(
+        sock,
+        `[ALERTA] Lead "${nome}" (deal ${dealId}): falha na conversão PDF do contrato — enviado como .docx. Erro: ${pdfErr?.message ?? pdfErr}`
+      );
+    } catch (docxErr) {
+      const msg = `[ERRO] Lead "${nome}" (deal ${dealId}): boletos emitidos na Inter mas falhou render do contrato (PDF e .docx). Cancela os ${parcelas} boletos no painel Inter antes de retentar. Erro: ${docxErr?.message ?? docxErr}`;
+      console.error(`[CONTRATO] ${msg}`);
+      await notifyConsultor(sock, msg);
+      return res.status(500).json({ error: "contrato render failed" });
+    }
   }
 
   // Envia: mensagem → contrato → todos os boletos
   const clientMessage = buildClientMessage(nome, parcelas, valor);
-  const contratoFilename = `Contrato de Consultoria - ${titleCase(nome)}.docx`;
+  const contratoFilename = `Contrato de Consultoria - ${titleCase(nome)}.${contratoExt}`;
   try {
     await sendWithPresence(sock, jid, clientMessage);
 
     await sock.sendMessage(jid, {
       document: contratoBuffer,
-      mimetype: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      mimetype: contratoMime,
       fileName: contratoFilename,
     });
     console.log(`[CONTRATO] deal ${dealId} (${nome}) → contrato enviado`);
