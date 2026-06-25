@@ -34,6 +34,35 @@ function applyMasculineSubstitutions(zip) {
   return zip;
 }
 
+// Modo cortesia: remove a Cláusula 4ª (DA REMUNERAÇÃO) inteira do .docx.
+// Estratégia: remove todos os parágrafos <w:p>...</w:p> que estão entre o
+// parágrafo que contém "CLÁUSULA 4" (inclusive) e o que contém "CLÁUSULA 5"
+// (exclusive). Preserva o resto do contrato.
+function applyCortesiaRemoval(zip) {
+  const xml = zip.file("word/document.xml").asText();
+  const paraRegex = /<w:p[ >][\s\S]*?<\/w:p>/g;
+  const paras = [...xml.matchAll(paraRegex)];
+
+  let startIdx = -1;
+  let endIdx = -1;
+  for (let i = 0; i < paras.length; i++) {
+    const text = paras[i][0].replace(/<[^>]+>/g, "");
+    if (text.includes("CLÁUSULA 4") && startIdx === -1) startIdx = i;
+    if (text.includes("CLÁUSULA 5") && startIdx !== -1) { endIdx = i; break; }
+  }
+
+  if (startIdx === -1 || endIdx === -1) {
+    throw new Error("Modo cortesia: não encontrei âncoras das cláusulas 4ª/5ª no template");
+  }
+
+  let modified = xml;
+  for (let i = endIdx - 1; i >= startIdx; i--) {
+    modified = modified.slice(0, paras[i].index) + modified.slice(paras[i].index + paras[i][0].length);
+  }
+  zip.file("word/document.xml", modified);
+  return zip;
+}
+
 const MESES_PT = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
@@ -96,24 +125,31 @@ function buildEnderecoCompleto(addr) {
  *
  * @param {object} params
  * @param {object} params.person — objeto `person` do payload do Piperun
- * @param {number} params.valor — valor de cada parcela
- * @param {number} params.parcelas — quantidade de parcelas
- * @param {string[]} params.vencimentos — array de datas (YYYY-MM-DD) das parcelas, em ordem
+ * @param {number} [params.valor] — valor de cada parcela (obrigatório se !cortesia)
+ * @param {number} [params.parcelas] — quantidade de parcelas (obrigatório se !cortesia)
+ * @param {string[]} [params.vencimentos] — datas YYYY-MM-DD das parcelas (obrigatório se !cortesia)
  * @param {Date} [params.dataAssinatura] — data da assinatura (default: hoje)
+ * @param {boolean} [params.cortesia] — modo "só contrato": remove Cláusula 4ª e
+ *                                       ignora valor/parcelas/vencimentos.
  * @returns {Buffer} buffer do .docx renderizado
  */
-export function renderContrato({ person, valor, parcelas, vencimentos, dataAssinatura }) {
+export function renderContrato({ person, valor, parcelas, vencimentos, dataAssinatura, cortesia = false }) {
   if (!person) throw new Error("renderContrato: person ausente");
-  if (!Number.isFinite(valor) || valor <= 0) throw new Error("renderContrato: valor inválido");
-  if (!Number.isFinite(parcelas) || parcelas < 1) throw new Error("renderContrato: parcelas inválidas");
-  if (!Array.isArray(vencimentos) || vencimentos.length !== parcelas) {
-    throw new Error(`renderContrato: esperava ${parcelas} vencimentos, recebi ${vencimentos?.length ?? 0}`);
+  if (!cortesia) {
+    if (!Number.isFinite(valor) || valor <= 0) throw new Error("renderContrato: valor inválido");
+    if (!Number.isFinite(parcelas) || parcelas < 1) throw new Error("renderContrato: parcelas inválidas");
+    if (!Array.isArray(vencimentos) || vencimentos.length !== parcelas) {
+      throw new Error(`renderContrato: esperava ${parcelas} vencimentos, recebi ${vencimentos?.length ?? 0}`);
+    }
   }
 
   const tplBuffer = readFileSync(resolve(TEMPLATE_PATH));
   let zip = new PizZip(tplBuffer);
   if (isMasculino(person.gender)) {
     zip = applyMasculineSubstitutions(zip);
+  }
+  if (cortesia) {
+    zip = applyCortesiaRemoval(zip);
   }
   const doc = new Docxtemplater(zip, {
     delimiters: { start: "{{", end: "}}" },
@@ -124,14 +160,8 @@ export function renderContrato({ person, valor, parcelas, vencimentos, dataAssin
   const nomeCliente = String(person.name ?? "").trim();
   const addr = person.address ?? {};
   const cidadeUf = `${person.city?.name ?? ""}/${person.city?.uf ?? ""}`;
-  const valorTotal = valor * parcelas;
 
-  const venc1 = vencimentos[0];
-  const venc2 = vencimentos[1] ?? vencimentos[0];
-  const vencLast = vencimentos[vencimentos.length - 1];
-  const diaDoMes = parseLocalDate(venc1).getDate();
-
-  doc.render({
+  const placeholders = {
     cliente_nome_maiusculo: nomeCliente.toUpperCase(),
     cliente_nome: nomeCliente,
     cliente_cpf: fmtCpf(person.cpf),
@@ -139,17 +169,27 @@ export function renderContrato({ person, valor, parcelas, vencimentos, dataAssin
     cliente_bairro: addr.district ?? "",
     cliente_cep: fmtCep(addr.postal_code),
     cliente_cidade_uf: cidadeUf,
-    valor_total: `R$ ${fmtBrl(valorTotal)}`,
-    valor_parcela: `R$ ${fmtBrl(valor)}`,
-    total_parcelas: String(parcelas),
-    primeira_parcela_vencimento: fmtDateBr(venc1),
-    segunda_parcela_vencimento: fmtDateBr(venc2),
-    ultima_parcela_vencimento: fmtDateBr(vencLast),
-    dia_do_mes_vencimento: String(diaDoMes),
     cidade_assinatura: cidadeUf,
     data_assinatura_extenso: fmtDataExtenso(dataAssinatura ?? new Date()),
-  });
+  };
 
+  if (!cortesia) {
+    const valorTotal = valor * parcelas;
+    const venc1 = vencimentos[0];
+    const venc2 = vencimentos[1] ?? vencimentos[0];
+    const vencLast = vencimentos[vencimentos.length - 1];
+    Object.assign(placeholders, {
+      valor_total: `R$ ${fmtBrl(valorTotal)}`,
+      valor_parcela: `R$ ${fmtBrl(valor)}`,
+      total_parcelas: String(parcelas),
+      primeira_parcela_vencimento: fmtDateBr(venc1),
+      segunda_parcela_vencimento: fmtDateBr(venc2),
+      ultima_parcela_vencimento: fmtDateBr(vencLast),
+      dia_do_mes_vencimento: String(parseLocalDate(venc1).getDate()),
+    });
+  }
+
+  doc.render(placeholders);
   return doc.getZip().generate({ type: "nodebuffer" });
 }
 
