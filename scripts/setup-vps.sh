@@ -13,7 +13,13 @@ echo "==> Instalando dependências do sistema..."
 apt-get install -y -qq curl git
 
 echo "==> Instalando LibreOffice headless (pra conversão .docx → PDF dos contratos)..."
-apt-get install -y --no-install-recommends libreoffice
+# --no-install-recommends pula pacotes de fontes e módulos auxiliares; sem
+# eles a conversão sai com fontes fallback (tamanho errado) e às vezes não
+# renderiza imagens embutidas. Por isso instalamos explicitamente o que precisa.
+apt-get install -y --no-install-recommends \
+  libreoffice-writer libreoffice-draw libreoffice-impress \
+  fonts-liberation fonts-liberation2 fonts-dejavu fonts-noto-core fontconfig
+fc-cache -f
 
 echo "==> Instalando Node.js 22 via NodeSource..."
 curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
