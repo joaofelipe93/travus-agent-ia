@@ -9,6 +9,31 @@ const convertAsync = promisify(libre.convert);
 
 const TEMPLATE_PATH = process.env.CONTRATO_TEMPLATE_PATH ?? "src/assets/contrato-template.docx";
 
+// Concordância de gênero: o template "fonte" é feminino ("brasileira", "inscrita"
+// etc). Se person.gender === "Masculino", substituímos in-memory no XML antes
+// de renderizar. Outras flexões (gender ausente, "Feminino", "Outro") caem no
+// feminino — preserva o comportamento histórico do template.
+const TROCAS_MASCULINO = [
+  ["brasileira", "brasileiro"],
+  ["inscrita", "inscrito"],
+  ["assessorá-la", "assessorá-lo"],
+  ["informada", "informado"],
+];
+
+function isMasculino(gender) {
+  return String(gender ?? "").trim().toLowerCase().startsWith("masc");
+}
+
+function applyMasculineSubstitutions(zip) {
+  const xml = zip.file("word/document.xml").asText();
+  let modified = xml;
+  for (const [antes, depois] of TROCAS_MASCULINO) {
+    modified = modified.split(antes).join(depois);
+  }
+  zip.file("word/document.xml", modified);
+  return zip;
+}
+
 const MESES_PT = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
@@ -86,7 +111,10 @@ export function renderContrato({ person, valor, parcelas, vencimentos, dataAssin
   }
 
   const tplBuffer = readFileSync(resolve(TEMPLATE_PATH));
-  const zip = new PizZip(tplBuffer);
+  let zip = new PizZip(tplBuffer);
+  if (isMasculino(person.gender)) {
+    zip = applyMasculineSubstitutions(zip);
+  }
   const doc = new Docxtemplater(zip, {
     delimiters: { start: "{{", end: "}}" },
     paragraphLoop: true,
