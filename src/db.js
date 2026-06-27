@@ -147,6 +147,11 @@ ensureColumn("conversations", "piperun_deal_id", "TEXT");
 ensureColumn("conversations", "scheduled_at", "INTEGER");
 ensureColumn("boletos_contrato_parcelas", "jid", "TEXT");
 ensureColumn("boletos_contrato_parcelas", "nome", "TEXT");
+ensureColumn("boletos_contrato_parcelas", "paid_at", "INTEGER");
+ensureColumn("boletos_contrato_parcelas", "status", "TEXT");
+ensureColumn("boletos_contrato_parcelas", "status_checked_at", "INTEGER");
+ensureColumn("boletos_contrato_parcelas", "atraso_level", "INTEGER NOT NULL DEFAULT 0");
+ensureColumn("boletos_contrato_parcelas", "atraso_notified_at", "INTEGER");
 
 export function phoneFromJid(jid) {
   return jid.split("@")[0];
@@ -476,6 +481,40 @@ export function getContratoParcelas(dealId) {
   return db.prepare(
     "SELECT * FROM boletos_contrato_parcelas WHERE deal_id = ? ORDER BY parcela_n ASC"
   ).all(String(dealId));
+}
+
+// Busca parcelas que ainda não foram pagas, já enviadas pelo WhatsApp, pra
+// checar status na Inter e enviar lembrete de atraso. Usado pelo cron de
+// atrasos. Inclui paid_at NULL pra pular as já marcadas como pagas.
+export function getParcelasParaAcompanhar() {
+  return db.prepare(`
+    SELECT *
+      FROM boletos_contrato_parcelas
+     WHERE pdf_sent = 1
+       AND paid_at IS NULL
+       AND data_vencimento IS NOT NULL
+       AND codigo_solicitacao IS NOT NULL
+     ORDER BY data_vencimento ASC, deal_id ASC, parcela_n ASC
+  `).all();
+}
+
+export function updateParcelaStatus(dealId, parcelaN, { status, paid_at }) {
+  db.prepare(`
+    UPDATE boletos_contrato_parcelas
+       SET status = ?,
+           status_checked_at = unixepoch(),
+           paid_at = COALESCE(?, paid_at)
+     WHERE deal_id = ? AND parcela_n = ?
+  `).run(status ?? null, paid_at ?? null, String(dealId), Number(parcelaN));
+}
+
+export function bumpParcelaAtrasoLevel(dealId, parcelaN, newLevel) {
+  db.prepare(`
+    UPDATE boletos_contrato_parcelas
+       SET atraso_level = ?,
+           atraso_notified_at = unixepoch()
+     WHERE deal_id = ? AND parcela_n = ?
+  `).run(Number(newLevel), String(dealId), Number(parcelaN));
 }
 
 export function recordBoletoEmitido({
