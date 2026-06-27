@@ -369,34 +369,43 @@ export async function emissaoContratoWebhookHandler(req, res) {
     }
   }
 
-  // Renderiza o contrato. Tenta PDF primeiro (via LibreOffice headless).
-  // Se falhar (libreoffice não instalado, crash do soffice, etc), fallback
-  // pro .docx — alerta o consultor mas não bloqueia a entrega.
+  // Renderiza o contrato. Default: .docx (path confiável e fiel ao template).
+  // PDF (via LibreOffice headless) tem renderização ruim do nosso template
+  // específico (fonte/imagem do cabeçalho) — fica off por padrão. Pra reativar
+  // a tentativa de PDF: setar CONTRATO_FORMAT=pdf no .env. Refs #92.
   const renderParams = cortesia
     ? { person, cortesia: true }
     : { person, valor, parcelas, vencimentos: emitidas.map((e) => e.vencimento) };
+  const wantPdf = String(process.env.CONTRATO_FORMAT ?? "docx").toLowerCase() === "pdf";
+
   let contratoBuffer;
-  let contratoExt = "pdf";
-  let contratoMime = "application/pdf";
-  try {
-    contratoBuffer = await renderContratoPdf(renderParams);
-    console.log(`[CONTRATO] deal ${dealId} → contrato PDF renderizado${cortesia ? " (cortesia)" : ""} (${contratoBuffer.length} bytes)`);
-  } catch (pdfErr) {
-    console.warn(`[CONTRATO] deal ${dealId} → falha no PDF, tentando fallback .docx: ${pdfErr?.message ?? pdfErr}`);
+  let contratoExt = "docx";
+  let contratoMime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+  if (wantPdf) {
     try {
-      contratoBuffer = renderContrato(renderParams);
-      contratoExt = "docx";
-      contratoMime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-      console.log(`[CONTRATO] deal ${dealId} → contrato .docx renderizado (fallback, ${contratoBuffer.length} bytes)`);
+      contratoBuffer = await renderContratoPdf(renderParams);
+      contratoExt = "pdf";
+      contratoMime = "application/pdf";
+      console.log(`[CONTRATO] deal ${dealId} → contrato PDF renderizado${cortesia ? " (cortesia)" : ""} (${contratoBuffer.length} bytes)`);
+    } catch (pdfErr) {
+      console.warn(`[CONTRATO] deal ${dealId} → PDF falhou, caindo pro .docx: ${pdfErr?.message ?? pdfErr}`);
       await notifyConsultor(
         sock,
-        `[ALERTA] Lead "${nome}" (deal ${dealId}): falha na conversão PDF do contrato — enviado como .docx. Erro: ${pdfErr?.message ?? pdfErr}`
+        `[ALERTA] Lead "${nome}" (deal ${dealId}): falha na conversão PDF, enviado como .docx. Erro: ${pdfErr?.message ?? pdfErr}`
       );
+    }
+  }
+
+  if (!contratoBuffer) {
+    try {
+      contratoBuffer = renderContrato(renderParams);
+      console.log(`[CONTRATO] deal ${dealId} → contrato .docx renderizado${cortesia ? " (cortesia)" : ""} (${contratoBuffer.length} bytes)`);
     } catch (docxErr) {
       const sufixoErro = cortesia
         ? "(modo cortesia, sem boletos)"
         : `Cancela os ${parcelas} boletos no painel Inter antes de retentar.`;
-      const msg = `[ERRO] Lead "${nome}" (deal ${dealId}): falhou render do contrato (PDF e .docx). ${sufixoErro} Erro: ${docxErr?.message ?? docxErr}`;
+      const msg = `[ERRO] Lead "${nome}" (deal ${dealId}): falhou render do contrato .docx. ${sufixoErro} Erro: ${docxErr?.message ?? docxErr}`;
       console.error(`[CONTRATO] ${msg}`);
       await notifyConsultor(sock, msg);
       return res.status(500).json({ error: "contrato render failed" });
