@@ -1,0 +1,39 @@
+import cron from "node-cron";
+import { runContratoReminders } from "../jobs/contrato-reminders.js";
+import { getSock } from "../api/index.js";
+
+const DEFAULT_SCHEDULE = "0 9 * * *";
+const TZ = "America/Sao_Paulo";
+
+let scheduled = false;
+
+export function startContratoRemindersCron() {
+  if (scheduled) return;
+  if (process.env.CONTRATO_REMINDER_ENABLED === "false") {
+    console.log("[CONTRATO_REMINDER_CRON] desativado via CONTRATO_REMINDER_ENABLED=false");
+    return;
+  }
+
+  const schedule = process.env.CONTRATO_REMINDER_CRON ?? DEFAULT_SCHEDULE;
+  if (!cron.validate(schedule)) {
+    console.error(`[CONTRATO_REMINDER_CRON] expressão inválida "${schedule}", abortando agendamento`);
+    return;
+  }
+
+  cron.schedule(
+    schedule,
+    async () => {
+      console.log("[CONTRATO_REMINDER_CRON] disparado");
+      const sock = getSock();
+      try {
+        await runContratoReminders(sock);
+      } catch (err) {
+        console.error(`[CONTRATO_REMINDER_CRON] erro no run: ${err?.message ?? err}`);
+      }
+    },
+    { timezone: TZ }
+  );
+
+  scheduled = true;
+  console.log(`[CONTRATO_REMINDER_CRON] agendado: "${schedule}" (${TZ})`);
+}

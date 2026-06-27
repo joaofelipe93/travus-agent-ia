@@ -145,6 +145,8 @@ ensureColumn("conversations", "bot_enabled", "INTEGER NOT NULL DEFAULT 1");
 ensureColumn("conversations", "call_answered_at", "INTEGER");
 ensureColumn("conversations", "piperun_deal_id", "TEXT");
 ensureColumn("conversations", "scheduled_at", "INTEGER");
+ensureColumn("boletos_contrato_parcelas", "jid", "TEXT");
+ensureColumn("boletos_contrato_parcelas", "nome", "TEXT");
 
 export function phoneFromJid(jid) {
   return jid.split("@")[0];
@@ -418,12 +420,14 @@ export function recordContratoParcela({
   data_vencimento,
   linha_digitavel,
   pix_copia_e_cola,
+  jid,
+  nome,
 }) {
   const result = db.prepare(`
     INSERT OR IGNORE INTO boletos_contrato_parcelas
       (deal_id, parcela_n, total_parcelas, codigo_solicitacao, seu_numero,
-       valor_nominal, data_vencimento, linha_digitavel, pix_copia_e_cola)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       valor_nominal, data_vencimento, linha_digitavel, pix_copia_e_cola, jid, nome)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     String(deal_id),
     Number(parcela_n),
@@ -433,9 +437,26 @@ export function recordContratoParcela({
     valor_nominal ?? null,
     data_vencimento ?? null,
     linha_digitavel ?? null,
-    pix_copia_e_cola ?? null
+    pix_copia_e_cola ?? null,
+    jid ?? null,
+    nome ?? null
   );
   return result.changes > 0;
+}
+
+// Busca parcelas que ainda não foram enviadas pelo WhatsApp e cujo vencimento
+// é hoje ou nos próximos `windowDays` dias. Usado pelo cron de lembretes.
+export function getParcelasParaLembrar(windowDays) {
+  return db.prepare(`
+    SELECT *
+      FROM boletos_contrato_parcelas
+     WHERE pdf_sent = 0
+       AND parcela_n > 1
+       AND data_vencimento IS NOT NULL
+       AND date(data_vencimento) BETWEEN date('now', 'localtime')
+                                     AND date('now', 'localtime', '+' || ? || ' days')
+     ORDER BY data_vencimento ASC, deal_id ASC, parcela_n ASC
+  `).all(Number(windowDays));
 }
 
 export function markContratoParcelaPdfSent(dealId, parcelaN) {
