@@ -27,7 +27,7 @@ const PDF_DELAY_MS = Number(process.env.INTER_PDF_DELAY_MS ?? 1500);
 const VENC_PRIMEIRA_DIAS = Number(process.env.INTER_CONTRATO_VENC_PRIMEIRA_DIAS ?? 1);
 
 const DEFAULT_CLIENT_MESSAGE =
-  "Oi, {{primeiro_nome}}! 😊\n\nSegue o seu contrato de consultoria e os boletos: {{total_parcelas}}x de R$ {{valor}} 📄\n\nA primeira parcela vence amanhã. As demais, no mesmo dia dos próximos meses.\n\nQualquer dúvida, conta comigo!";
+  "Oi, {{primeiro_nome}}! 😊\n\nSegue o seu contrato de consultoria e o boleto da primeira parcela: {{total_parcelas}}x de R$ {{valor}} 📄\n\nA primeira parcela vence amanhã. As demais você vai receber pertinho do vencimento de cada uma.\n\nQualquer dúvida, conta comigo!";
 
 const DEFAULT_CLIENT_MESSAGE_CORTESIA =
   "Oi, {{primeiro_nome}}! 😊\n\nSegue o seu contrato de consultoria 📄\n\nQualquer dúvida, conta comigo!";
@@ -339,6 +339,8 @@ export async function emissaoContratoWebhookHandler(req, res) {
           seu_numero: interPayload.seuNumero,
           valor_nominal: valor,
           data_vencimento: vencimento,
+          jid,
+          nome,
         });
         emitidas.push({ n, codigo, seuNumero: interPayload.seuNumero, vencimento });
         console.log(`[CONTRATO] deal ${dealId} → parcela ${n}/${parcelas} emitida (codigo=${codigo}, vence ${vencimento})`);
@@ -354,18 +356,17 @@ export async function emissaoContratoWebhookHandler(req, res) {
     // Aguarda Inter disponibilizar os PDFs
     await sleep(2000);
 
-    // Baixa todos os PDFs antes de mandar (falhar em algum não deixa o cliente com lista parcial)
-    for (const { n, codigo, seuNumero } of emitidas) {
-      try {
-        const pdf = await getBoletoPdf(codigo);
-        pdfs.push({ n, codigo, seuNumero, pdf });
-      } catch (err) {
-        const msg = `[ERRO] Lead "${nome}" (deal ${dealId}): falha ao baixar PDF da parcela ${n}/${parcelas} (codigo=${codigo}): ${err?.message ?? err}`;
-        console.error(`[CONTRATO] ${msg}`);
-        await notifyConsultor(sock, msg);
-        return res.status(502).json({ error: "inter pdf failed", parcela_falha: n });
-      }
-      await sleep(PDF_DELAY_MS);
+    // Baixa APENAS o PDF da 1ª parcela. As demais ficam com pdf_sent=0 e o cron
+    // diário (src/jobs/contrato-reminders.js) baixa e envia perto do vencimento.
+    const primeira = emitidas[0];
+    try {
+      const pdf = await getBoletoPdf(primeira.codigo);
+      pdfs.push({ n: primeira.n, codigo: primeira.codigo, seuNumero: primeira.seuNumero, pdf });
+    } catch (err) {
+      const msg = `[ERRO] Lead "${nome}" (deal ${dealId}): falha ao baixar PDF da parcela 1/${parcelas} (codigo=${primeira.codigo}): ${err?.message ?? err}`;
+      console.error(`[CONTRATO] ${msg}`);
+      await notifyConsultor(sock, msg);
+      return res.status(502).json({ error: "inter pdf failed", parcela_falha: 1 });
     }
   }
 
@@ -450,7 +451,7 @@ export async function emissaoContratoWebhookHandler(req, res) {
     console.log(
       cortesia
         ? `[CONTRATO] deal ${dealId} (${nome}) → contrato cortesia entregue para ${jid}`
-        : `[CONTRATO] deal ${dealId} (${nome}) → contrato + ${parcelas} boletos entregues para ${jid}`
+        : `[CONTRATO] deal ${dealId} (${nome}) → contrato + 1ª parcela (de ${parcelas}) entregues para ${jid}`
     );
   } catch (err) {
     const msg = `[ERRO] Lead "${nome}" (deal ${dealId}): falhou envio no WhatsApp: ${err?.message ?? err}`;
