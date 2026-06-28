@@ -22,7 +22,6 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "googleapis": "^171.4.0",
-    "libreoffice-convert": "^1.8.1",
     "node-cron": "^4.3.0",
     "openai": "^6.35.0",
     "pizzip": "^3.2.0",

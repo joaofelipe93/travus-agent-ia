@@ -1,11 +1,9 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { promisify } from "node:util";
 import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
-import libre from "libreoffice-convert";
 
-const convertAsync = promisify(libre.convert);
+const CONVERTAPI_BASE_URL = "https://v2.convertapi.com";
 
 const TEMPLATE_PATH = process.env.CONTRATO_TEMPLATE_PATH ?? "src/assets/contrato-template.docx";
 
@@ -194,29 +192,55 @@ export function renderContrato({ person, valor, parcelas, vencimentos, dataAssin
 }
 
 /**
- * Renderiza o contrato e converte pra PDF via LibreOffice headless.
- * Requer libreoffice instalado no sistema (sudo apt install libreoffice).
+ * Converte um buffer .docx pra PDF via ConvertAPI (https://www.convertapi.com).
+ * Requer CONVERTAPI_TOKEN no .env. Free tier (1500s/mês) cobre o uso da Travus.
+ *
+ * Histórico: anteriormente usávamos libreoffice-convert (LibreOffice headless),
+ * mas a fonte saía com métrica errada e a imagem do cabeçalho não renderizava
+ * corretamente. ConvertAPI usa Word real do lado deles e devolve PDF fiel. Ver
+ * issue #91.
+ *
+ * @param {Buffer} docxBuffer — buffer do .docx pra converter
+ * @returns {Promise<Buffer>} buffer do PDF
+ */
+export async function convertDocxToPdf(docxBuffer) {
+  const token = process.env.CONVERTAPI_TOKEN;
+  if (!token) throw new Error("CONVERTAPI_TOKEN não configurado no .env");
+
+  const form = new FormData();
+  form.append("File", new Blob([docxBuffer]), "contrato.docx");
+
+  const res = await fetch(`${CONVERTAPI_BASE_URL}/convert/docx/to/pdf`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}` },
+    body: form,
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "(corpo ilegível)");
+    throw new Error(`ConvertAPI → HTTP ${res.status}: ${body.slice(0, 300)}`);
+  }
+  const json = await res.json();
+  const fileData = json?.Files?.[0]?.FileData;
+  if (!fileData) {
+    throw new Error(`ConvertAPI → resposta sem Files[0].FileData: ${JSON.stringify(json).slice(0, 200)}`);
+  }
+  const pdfBuffer = Buffer.from(fileData, "base64");
+  if (pdfBuffer.length < 100 || pdfBuffer.slice(0, 4).toString("ascii") !== "%PDF") {
+    throw new Error(`ConvertAPI → PDF inválido (${pdfBuffer.length} bytes, magic="${pdfBuffer.slice(0, 4).toString("ascii")}")`);
+  }
+  return pdfBuffer;
+}
+
+/**
+ * Renderiza o contrato e devolve PDF (via ConvertAPI).
+ * Throw se CONVERTAPI_TOKEN não estiver setado ou a API falhar.
  *
  * @param {object} params — mesma assinatura de renderContrato
  * @returns {Promise<Buffer>} buffer do PDF
  */
 export async function renderContratoPdf(params) {
   const docxBuffer = renderContrato(params);
-  try {
-    const pdfBuffer = await convertAsync(docxBuffer, ".pdf", undefined);
-    if (!pdfBuffer || pdfBuffer.length < 100) {
-      throw new Error(`PDF gerado vazio/inválido (${pdfBuffer?.length ?? 0} bytes)`);
-    }
-    if (pdfBuffer.slice(0, 4).toString("ascii") !== "%PDF") {
-      throw new Error("PDF gerado sem magic bytes %PDF — libreoffice falhou silenciosamente");
-    }
-    return pdfBuffer;
-  } catch (err) {
-    const msg = err?.message ?? String(err);
-    throw new Error(
-      `Falha ao converter contrato .docx → PDF (libreoffice instalado e acessível?): ${msg}`
-    );
-  }
+  return convertDocxToPdf(docxBuffer);
 }
 
 // Exportados pra teste isolado / reuso
