@@ -6,6 +6,16 @@ Quando um deal do Piperun entra em determinada stage, o bot manda pra o lead o P
 
 Webhook `POST /webhook/piperun` disparado pelo Piperun quando o deal entra em stage configurada.
 
+## Pré-requisitos no CRM
+
+Simples:
+
+| Campo Piperun | Nota |
+|---|---|
+| Telefone (contato principal da pessoa) | Precisa existir no WhatsApp — senão bot retorna 404 e não envia |
+
+Nome não é usado nesse fluxo (mensagem é genérica).
+
 ## Componentes
 
 - `src/api/webhook-piperun.js` — handler
