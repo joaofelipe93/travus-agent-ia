@@ -6,6 +6,34 @@ Fluxo principal do bot: cliente escreve no WhatsApp, Ana qualifica, coleta dados
 
 Mensagem chega no WhatsApp do bot (`messages.upsert` do Baileys).
 
+## Pré-requisitos (consultor / operação)
+
+O consultor **não precisa fazer nada durante a captação em si** — a Ana coleta tudo pela conversa com o lead. Mas alguns pontos merecem atenção:
+
+### 1. Prompt da Ana está sempre ativo
+
+Editar `prompts/ana.md` (versionado no repo) exige commit + deploy. Não dá pra ajustar o tom da Ana pelo Piperun.
+
+### 2. Depois do agendamento, o event no Calendar entra automaticamente
+
+O bot cria o event já com o telefone do lead na descrição (formato `55XXXXXXXXXXX`) — **fundamental** pro fluxo de [lembretes de reunião](./lembretes-reuniao.md) funcionar.
+
+Se por algum motivo o consultor **editar o event depois** (mudar horário, título, descrição), preservar:
+- O telefone no formato `55XXXXXXXXXXX` (título ou descrição)
+- O link do Meet (`hangoutLink`)
+
+Sem isso, o bot para de mandar os lembretes daquele event específico.
+
+### 3. Consultor pode marcar conversa como manual
+
+Se por algum motivo o consultor for retomar a conversa manualmente (ex: lead precisa de atenção humana no meio da qualificação), pode setar `bot_enabled = 0` na conversa direto no banco. Bot cala pra sempre naquele contato até reativação manual.
+
+### 4. Follow-ups desligam sozinhos em 3 casos
+
+- Lead se qualifica errado (moradia / capacidade baixa / renda baixa) → Ana emite `{"encerrar":"..."}` → bot para de cutucar
+- Consultor **atende ligação** do lead → Baileys detecta call.accept → follow-ups off (`call_answered_at`)
+- Lead completa agendamento → conversation.scheduled_at → bot cala
+
 ## Componentes envolvidos
 
 - `src/whatsapp/index.js` — recebe e roteia

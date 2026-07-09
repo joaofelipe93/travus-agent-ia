@@ -11,17 +11,55 @@ Fluxo mais denso do bot. Quando o lead chega na stage "Emissão de Contrato" no 
 
 Webhook `POST /webhook/piperun/emissao-contrato` disparado pelo Piperun quando deal entra na stage `654265`.
 
-## Como o consultor informa valor+parcelas
+## Pré-requisitos no CRM (o consultor precisa preencher ANTES de mover a stage)
 
-No campo **Observação da PESSOA** (não do deal), com formato `R$ X xN`:
+Sem os dados abaixo o webhook chega, o bot alerta o consultor no WhatsApp e **não emite os boletos**. Nenhum deles pode ficar vazio.
+
+### 1. Valor e parcelas — campo "Observação" da PESSOA
+
+⚠️ Piperun tem 2 campos "Observação": um do **deal** (log automático, o bot ignora) e um da **pessoa** (editável). O bot lê da pessoa.
+
+Formato esperado (regex `R\$\s*([\d.,]+)\s*x\s*(\d+)`):
 
 ```
-Valor da consultoria: R$ 300 x12
+Valor da consultoria: R$ 300 x 12
 ```
 
-Regex aceita variações: `R$300 x12`, `R$ 1.500,00 x6`, etc.
+Aceita variações: `R$300 x12`, `R$ 1.500,00 x 6`, `R$1.234,56x24`.
 
-**Modo cortesia** (contrato sem cobrança): preenche `Sem cobrança` no lugar. Bot pula Inter, envia só contrato (com Cláusula 4ª removida em memória).
+**Modo cortesia** (contrato sem cobrança): preenche `Sem cobrança` no lugar. Bot pula a Inter, envia só o contrato (com Cláusula 4ª removida em memória).
+
+### 2. Dados do pagador (obrigatórios pela Inter)
+
+Na pessoa do deal, todos os campos abaixo precisam estar preenchidos:
+
+| Campo Piperun | Exemplo | Nota |
+|---|---|---|
+| CPF | `123.456.789-09` | Só dígitos, ou com pontuação — bot normaliza |
+| Endereço → Rua | `Avenida Moema Tinoco da Cunha Lima` | Sem número |
+| Endereço → Número | `883` | Opcional (bot usa só o que tiver) |
+| Endereço → CEP | `59133-090` | 8 dígitos após limpar pontuação |
+| Endereço → Bairro | `Pajuçara` | |
+| Cidade | Natal/RN | Piperun exige cadastro estruturado (cidade + UF) |
+| Telefone (contato principal) | `(84) 99164-6369` | Precisa **existir no WhatsApp** também |
+| E-mail (contato principal) | `joao@dominio.com` | Opcional, mas recomendado |
+
+### 3. Gênero (opcional, mas melhora o contrato)
+
+Campo Piperun: `Sexo` / `Gênero` da pessoa. Aceita `Masculino` ou `Feminino`.
+
+- `Masculino` → contrato usa "brasileiro", "inscrito", "assessorá-lo", "informado"
+- `Feminino` OU vazio → usa versão feminina (default)
+
+### Como o bot reage se faltar algo
+
+| Faltando | Bot faz |
+|---|---|
+| Observação com `R$X xN` ou `Sem cobrança` | Alerta consultor por WhatsApp e para |
+| CPF, endereço, bairro, CEP, cidade ou UF | Alerta consultor por WhatsApp e para |
+| Telefone | Alerta consultor por WhatsApp e para |
+| Telefone não existe no WhatsApp | Alerta consultor por WhatsApp e para |
+| Gênero | Assume feminino (default) e continua |
 
 ## Componentes
 

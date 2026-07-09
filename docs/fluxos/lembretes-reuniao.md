@@ -6,6 +6,54 @@ Bot lembra o lead da call agendada com o consultor. Envia até 5 lembretes por e
 
 Scheduler `startMeetingReminderScheduler` roda a cada **2 minutos**, consulta o Google Calendar dos próximos 26h, e dispara lembretes que caíram na janela.
 
+## Pré-requisitos no Google Calendar
+
+Diferente dos outros fluxos, aqui a preparação é no **Google Calendar do consultor**, não no Piperun. Duas situações:
+
+### Situação A — Event criado pelo bot (durante agendamento com a Ana)
+
+**Nada a fazer manualmente.** A Ana cria o event automaticamente ao capturar o lead completo, injetando o telefone na descrição em formato `55XXXXXXXXXXX` e mantendo o link do Meet.
+
+### Situação B — Consultor cria event à mão (ex: reunião extra, reagendamento)
+
+Pra que o bot mande lembretes, **o event tem que ter 2 coisas**:
+
+1. **Telefone do lead** no título OU na descrição, no formato `55` + DDD + número **sem espaços ou pontuação**. Regex do bot: `\b(55\d{10,11})\b`.
+
+   ✅ Aceita:
+   - `"558491646369"` (13 dígitos)
+   - `"5511987654321"` (13 dígitos)
+
+   ❌ Não aceita:
+   - `"55 84 99164-6369"` (com espaços/hífen)
+   - `"+55 84 9 9164-6369"` (com +)
+   - `"84 99164-6369"` (sem DDI)
+
+2. **Link do Meet** (`hangoutLink` no Calendar). Google adiciona automaticamente se você marcar "Adicionar chamada do Google Meet" ao criar o event.
+
+### Exemplos práticos
+
+**Título válido** (leva ao envio de lembrete):
+```
+Call Travus — João Felipe 558491646369
+```
+
+**Descrição válida** (também funciona):
+```
+Reagendamento da consultoria.
+Contato: 558491646369
+```
+
+### E se o lead não estiver na tabela `leads` do banco?
+
+Bot loga `[REMINDER] aviso: telefone 55... não corresponde a nenhum lead`. Não envia lembrete.
+
+Situações comuns:
+- Event pra pessoa que **nunca passou pelo bot** (indicação, cliente antigo etc)
+- Lead antigo com dados desatualizados no banco
+
+Se precisar registrar manualmente pra que o lembrete funcione: preencher a tabela `leads` com nome, celular e `conversation_id`. Sem script pronto pra isso (ver [troubleshooting](../operacao/troubleshooting.md)).
+
 ## Componentes
 
 - `src/integrations/meeting-reminders.js` — scheduler + envio (todo o fluxo num arquivo)

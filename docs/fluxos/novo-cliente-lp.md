@@ -6,9 +6,24 @@ Quando um lead se cadastra no formulário da LP e vira deal no Piperun na stage 
 
 Webhook `POST /webhook/piperun/novo-cliente` — Piperun dispara quando deal entra na stage "Novos".
 
-## Filtro
+## Pré-requisitos no CRM (o que precisa estar preenchido)
 
-Só processa se `payload.origin.name === "LP V2"`. Outras origens retornam 200 `ignored_origin`.
+Normalmente **automático** pelo formulário da LP — nada a fazer manualmente. Só releva se um consultor criar deal na mão em vez do form.
+
+### Filtro obrigatório: `origin.name === "LP V2"`
+
+O Piperun tem "Origens" cadastradas. O formulário da LP grava a origem `LP V2` automaticamente. Se o deal for criado manualmente e a origem for outra (ex: "Indicação", "Instagram", em branco), o bot devolve 200 `ignored_origin` e **não faz nada**.
+
+Configurável via `NOVO_CLIENTE_REQUIRED_ORIGIN` (default `LP V2`).
+
+### Campos obrigatórios da pessoa
+
+| Campo Piperun | Uso |
+|---|---|
+| Nome | Mensagem "Olá, [Nome]! ..." |
+| Telefone (contato principal) | Bot manda WhatsApp aqui; precisa **existir no WhatsApp** |
+
+Sem nome, o bot manda "Olá!" só. Sem telefone, alerta e para.
 
 ## Componentes
 

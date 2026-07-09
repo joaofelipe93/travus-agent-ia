@@ -6,6 +6,33 @@ Cron mensal que busca no Piperun os clientes de consórcio ativos, consulta a Ca
 
 Cron `0 9 10 * *` — **dia 10 de cada mês às 09:00 BRT**.
 
+## Pré-requisitos no CRM (cliente por cliente)
+
+Pra que o boleto do consórcio saia pro cliente, o deal dele precisa estar todo certinho no Piperun:
+
+### 1. Estar na stage correta
+
+Deal do cliente ativo deve estar na stage `679217` (configurável via `PIPERUN_BOLETOS_STAGE_ID`). Deals em outras stages são ignorados pelo cron.
+
+### 2. Campos da pessoa preenchidos
+
+| Campo Piperun | Uso | Se faltar |
+|---|---|---|
+| CPF | Chamada `find-cota/{cpf}` no Canopus | `sem_cpf` no summary, cliente pulado |
+| Telefone (contato principal) | Envio pelo WhatsApp | `sem_telefone` no summary, cliente pulado |
+
+**CPF sem formatação ou com pontuação — tanto faz** (bot normaliza). Mas **precisa ser um CPF cadastrado no Canopus** (senão retorna `sem_cotas` — cliente não é do consórcio ou ainda não foi cadastrado lá).
+
+### 3. Telefone válido no WhatsApp
+
+Bot faz `sock.onWhatsApp(phone)` — se número não existe no WhatsApp, `fora_do_whatsapp` no summary e pula.
+
+### O que o consultor deve fazer
+
+- **Ao onboardar cliente novo do consórcio**: garantir que o deal foi movido pra stage `679217`, e que CPF + telefone estão preenchidos.
+- **Ao trocar telefone do cliente**: atualizar no Piperun antes do dia 10 do mês.
+- **Se cliente saiu do consórcio**: mover pra outra stage, ou o cron continuará tentando (não faz mal, mas polui log).
+
 ## Componentes
 
 - `src/scheduler/boletos-cron.js` — registra o cron
