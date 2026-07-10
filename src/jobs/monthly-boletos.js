@@ -16,7 +16,7 @@ const STAGE_ID = Number(process.env.PIPERUN_BOLETOS_STAGE_ID ?? 679217);
 const PACING_MS = Number(process.env.BOLETOS_PACING_MS ?? 3000);
 const BILL_PACING_MS = Number(process.env.BOLETOS_BILL_PACING_MS ?? 1500);
 const DEFAULT_MESSAGE =
-  "Oi, {{primeiro_nome}}! 😊\n\nTô te mandando {{boletos_label}} desse mês 📄\n\nPagando até o vencimento, sua vaga na próxima assembleia segue garantida, você concorre normalmente na contemplação do mês.\nSe já tá quitado, é só ignorar. Qualquer dúvida, conta comigo!\n\nBora juntos! 🚀";
+  "Oi, {{primeiro_nome}}! 😊\n\nTudo bem?\n\nEstou te encaminhando as informações referentes ao seu investimento deste mês.\n\nCada etapa cumprida é mais um passo na construção do patrimônio que estamos planejando juntos.\n\nMantendo tudo em dia, você segue participando normalmente da próxima assembleia e das oportunidades de contemplação do grupo.\n\nCaso o pagamento já tenha sido realizado, pode desconsiderar esta mensagem.\n\nSeguimos juntos nessa jornada! 🚀";
 
 function formatFirstName(fullName) {
   const raw = String(fullName ?? "").trim().split(/\s+/)[0] ?? "";
