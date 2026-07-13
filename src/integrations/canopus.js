@@ -17,6 +17,16 @@ function browserHeaders(extra = {}) {
   return headers;
 }
 
+// Canopus retorna coleções em 2 formatos:
+//   - Múltiplos itens: array [{...}, {...}]
+//   - Um item só:      objeto {"1": {...}} — chaves numéricas
+// Este helper normaliza pros dois casos.
+function toArray(collection) {
+  if (Array.isArray(collection)) return collection;
+  if (collection && typeof collection === "object") return Object.values(collection);
+  return [];
+}
+
 function cleanCpf(cpf) {
   return String(cpf ?? "").replace(/\D/g, "");
 }
@@ -35,7 +45,7 @@ export async function findCotasByCpf(cpf) {
     throw new Error(`Canopus GET /find-cota/${cpfDigits} → HTTP ${res.status}: ${body.slice(0, 300)}`);
   }
   const json = await res.json();
-  return Array.isArray(json?.cotas) ? json.cotas : [];
+  return toArray(json?.cotas);
 }
 
 export async function generateBills(grupo, cota, idCota) {
@@ -49,7 +59,7 @@ export async function generateBills(grupo, cota, idCota) {
     throw new Error(`Canopus GET /generate-bill → HTTP ${res.status}: ${body.slice(0, 300)}`);
   }
   const json = await res.json();
-  return Array.isArray(json?.bills) ? json.bills : [];
+  return toArray(json?.bills);
 }
 
 function isPdfBuffer(buffer) {
