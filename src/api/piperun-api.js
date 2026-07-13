@@ -34,7 +34,9 @@ export async function listDealsByStage(stageId, { pageSize = 100 } = {}) {
   const all = [];
   let page = 1;
   while (true) {
-    const url = `${BASE_URL}/deals?stage_id=${encodeURIComponent(stageId)}&page=${page}&show=${pageSize}&with=person`;
+    // deleted=0 filtra deals com soft-delete no CRM (a UI esconde, a API devolve).
+    // freezed=0 filtra congelados (não temos casos hoje, mas é boa prática).
+    const url = `${BASE_URL}/deals?stage_id=${encodeURIComponent(stageId)}&deleted=0&freezed=0&page=${page}&show=${pageSize}&with=person`;
     const res = await fetch(url, {
       method: "GET",
       headers: { accept: "application/json", token: token() },
@@ -53,7 +55,9 @@ export async function listDealsByStage(stageId, { pageSize = 100 } = {}) {
     if (!meta || page >= (meta.total_pages ?? 1) || data.length === 0) break;
     page += 1;
   }
-  return all;
+  // Defensivo: descarta deleted/freezed caso o filtro na query seja
+  // desrespeitado por alguma mudança futura na API.
+  return all.filter((d) => d?.deleted !== 1 && d?.freezed !== 1);
 }
 
 const CPF_FIELD_NAMES = ["cpf", "CPF", "Cpf"];
