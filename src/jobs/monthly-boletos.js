@@ -146,7 +146,7 @@ async function processDeal(sock, deal) {
         difSkipped += 1;
         continue;
       }
-      if (hasBoletoBeenSent(dealId, billId)) {
+      if (hasBoletoBeenSent({ dealId, groupCode: grupo, cotaCode, parcelNumber: bill?.parcelNumber })) {
         alreadySent += 1;
         continue;
       }
