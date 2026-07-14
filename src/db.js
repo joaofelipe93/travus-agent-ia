@@ -153,6 +153,19 @@ ensureColumn("boletos_contrato_parcelas", "status_checked_at", "INTEGER");
 ensureColumn("boletos_contrato_parcelas", "atraso_level", "INTEGER NOT NULL DEFAULT 0");
 ensureColumn("boletos_contrato_parcelas", "atraso_notified_at", "INTEGER");
 
+// bill.id da Canopus muda a cada generate-bill, então UNIQUE(deal_id, bill_id) nunca
+// dispara em re-run e o cron reenvia os mesmos boletos. Chave estável é
+// (deal_id, group_code, cota_code, parcel_number). Refs #109.
+db.exec(`
+  DELETE FROM boletos_sent
+  WHERE id NOT IN (
+    SELECT MIN(id) FROM boletos_sent
+    GROUP BY deal_id, group_code, cota_code, parcel_number
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_boletos_sent_parcel
+    ON boletos_sent(deal_id, group_code, cota_code, parcel_number);
+`);
+
 export function phoneFromJid(jid) {
   return jid.split("@")[0];
 }
@@ -408,10 +421,10 @@ export function recordBoletoSent({ deal_id, bill_id, parcel_number, group_code, 
   return result.changes > 0;
 }
 
-export function hasBoletoBeenSent(dealId, billId) {
+export function hasBoletoBeenSent({ dealId, groupCode, cotaCode, parcelNumber }) {
   const row = db.prepare(
-    "SELECT 1 FROM boletos_sent WHERE deal_id = ? AND bill_id = ?"
-  ).get(String(dealId), String(billId));
+    "SELECT 1 FROM boletos_sent WHERE deal_id = ? AND group_code = ? AND cota_code = ? AND parcel_number = ?"
+  ).get(String(dealId), groupCode ?? null, cotaCode ?? null, parcelNumber ?? null);
   return !!row;
 }
 
