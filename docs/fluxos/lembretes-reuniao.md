@@ -8,51 +8,122 @@ Scheduler `startMeetingReminderScheduler` roda a cada **2 minutos**, consulta o 
 
 ## Pré-requisitos no Google Calendar
 
-Diferente dos outros fluxos, aqui a preparação é no **Google Calendar do consultor**, não no Piperun. Duas situações:
+Diferente dos outros fluxos, aqui a preparação é no **Google Calendar do consultor** (`luiz.muniz@travuscapital.com.br`), não no Piperun. Duas situações:
 
 ### Situação A — Event criado pelo bot (durante agendamento com a Ana)
 
-**Nada a fazer manualmente.** A Ana cria o event automaticamente ao capturar o lead completo, injetando o telefone na descrição em formato `55XXXXXXXXXXX` e mantendo o link do Meet.
+**Nada a fazer manualmente.** A Ana cria o event automaticamente ao capturar o lead completo, injetando o telefone na descrição em formato `55XXXXXXXXXXX` e mantendo o link do Meet. Fica assim:
 
-### Situação B — Consultor cria event à mão (ex: reunião extra, reagendamento)
+```
+Título:      Lead WhatsApp - João Felipe
+Descrição:   Celular: 558491646369
+             Email: joao@dominio.com
+             Renda mensal: R$ 15.000
+```
 
-Pra que o bot mande lembretes, **o event tem que ter 2 coisas**:
+### Situação B — Consultor cria event à mão (reunião extra, reagendamento, indicação)
 
-1. **Telefone do lead** no título OU na descrição, no formato `55` + DDD + número **sem espaços ou pontuação**. Regex do bot: `\b(55\d{10,11})\b`.
+Pra que o bot mande lembretes, **o event tem que ter 3 coisas**:
 
-   ✅ Aceita:
-   - `"558491646369"` (13 dígitos)
-   - `"5511987654321"` (13 dígitos)
+#### 1. Telefone do lead no formato E.164 sem pontuação
 
-   ❌ Não aceita:
-   - `"55 84 99164-6369"` (com espaços/hífen)
-   - `"+55 84 9 9164-6369"` (com +)
-   - `"84 99164-6369"` (sem DDI)
+No **título OU na descrição** (qualquer um dos dois basta), o número precisa aparecer como `55` + DDD (2 dígitos) + número (8 ou 9 dígitos), tudo grudado. Regex que o bot procura: `\b(55\d{10,11})\b`.
 
-2. **Link do Meet** (`hangoutLink` no Calendar). Google adiciona automaticamente se você marcar "Adicionar chamada do Google Meet" ao criar o event.
+✅ **Aceita** (13 dígitos — DDI + DDD + 9 dígitos):
+```
+558491646369
+5511987654321
+```
 
-### Exemplos práticos
+✅ **Aceita** (12 dígitos — DDI + DDD + 8 dígitos, fixo):
+```
+5584991646369    (celular 9 dígitos → 13 total)
+558432214567     (fixo 8 dígitos → 12 total)
+```
 
-**Título válido** (leva ao envio de lembrete):
+❌ **NÃO aceita** (bot ignora o evento):
+```
+55 84 99164-6369     ← tem espaço e hífen
++55 84 9 9164-6369   ← tem + e espaços
+(84) 99164-6369      ← falta o 55 na frente
+84 99164-6369        ← falta o 55 e tem espaço
+```
+
+#### 2. Link do Google Meet (`hangoutLink`)
+
+Ao criar o event, marcar **"Adicionar videochamada do Google Meet"** no formulário. Sem isso, o bot pula o evento inteiro (`if (!event.hangoutLink) continue`).
+
+#### 3. Lead precisa existir na tabela `leads` do banco
+
+O bot faz `SELECT ... FROM leads WHERE celular = ?`. Se o número no evento não bate com nenhum lead que já conversou pela Ana no WhatsApp, o log mostra:
+
+```
+[REMINDER] aviso: telefone 55... não corresponde a nenhum lead
+```
+
+Nesse caso o lembrete **não sai**. Ver seção "Casos que exigem ação" abaixo.
+
+### Template pronto pra copiar
+
+**Título** (formato recomendado):
+```
+Call Travus — {NOME DO LEAD} 55{DDD}{NÚMERO}
+```
+
+Exemplo real:
 ```
 Call Travus — João Felipe 558491646369
 ```
 
-**Descrição válida** (também funciona):
+**Descrição** (formato recomendado, opcional se telefone já tá no título):
 ```
-Reagendamento da consultoria.
+Consultoria financeira.
 Contato: 558491646369
+Origem: indicação Fulano
 ```
 
-### E se o lead não estiver na tabela `leads` do banco?
+### Caso real que deu errado — evento da Miriam (10/07/2026)
 
-Bot loga `[REMINDER] aviso: telefone 55... não corresponde a nenhum lead`. Não envia lembrete.
+O Luiz criou manualmente um evento assim:
 
-Situações comuns:
-- Event pra pessoa que **nunca passou pelo bot** (indicação, cliente antigo etc)
-- Lead antigo com dados desatualizados no banco
+```
+Título:      1ª Reunião
+Descrição:   (MIRIAM SEGANTINI)
+Meet:        sim
+```
 
-Se precisar registrar manualmente pra que o lembrete funcione: preencher a tabela `leads` com nome, celular e `conversation_id`. Sem script pronto pra isso (ver [troubleshooting](../operacao/troubleshooting.md)).
+Resultado no log do bot:
+```
+[REMINDER] aviso: evento com Meet sem WhatsApp identificável: "1ª Reunião" (id=1aek5arolp57vgqucibioesrvs)
+```
+
+**Por que falhou:** nem `1ª Reunião` nem `(MIRIAM SEGANTINI)` contêm um número no formato `55XXXXXXXXXXX`. O bot não tem como associar o evento à Miriam — o nome não é usado como chave (nome comum tem chance de bater com lead errado).
+
+**Como deveria ter sido criado** (mesmo evento, corrigido):
+
+```
+Título:      1ª Reunião — Miriam Segantini 5584991234567
+Descrição:   (MIRIAM SEGANTINI)
+             Contato: 5584991234567
+Meet:        sim
+```
+
+Com isso o bot acharia a Miriam na tabela `leads` (ela já recebeu boletos, portanto tem registro), e dispararia os lembretes D-1 → dia → T-15min.
+
+### Casos que exigem ação do consultor
+
+| Situação | Log do bot | Ação |
+|---|---|---|
+| Evento sem número no título/descrição | `evento com Meet sem WhatsApp identificável` | Editar evento e adicionar `55XXXXXXXXXXX` |
+| Evento com número, mas lead não conversou pelo WhatsApp | `telefone 55... não corresponde a nenhum lead` | Sem lembrete automático. Consultor lembra pelo canal habitual |
+| Evento sem Meet | (silencioso) | Adicionar Meet ao evento se quiser lembrete |
+| Evento pra pessoa que passou pelo bot com outro número | `telefone ... não corresponde a nenhum lead` | Colocar no evento o número que a pessoa usou no WhatsApp (não o secundário) |
+
+### Janela de tempo do scheduler
+
+O scheduler consulta o Calendar a cada **2 minutos** e olha apenas eventos das próximas **26 horas** ([LOOKAHEAD_MS](../../src/integrations/meeting-reminders.js#L16)).
+
+**Consequência prática:** um evento marcado pra sexta 16h só entra na janela na quinta ~14h. Se você quer verificar se o bot está "vendo" seu evento hoje mas ele é depois de amanhã, o log NÃO vai mostrar nada relacionado ainda — está correto. Aguarde a janela.
 
 ## Componentes
 

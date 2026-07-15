@@ -8,30 +8,81 @@ Cron `0 9 10 * *` — **dia 10 de cada mês às 09:00 BRT**.
 
 ## Pré-requisitos no CRM (cliente por cliente)
 
-Pra que o boleto do consórcio saia pro cliente, o deal dele precisa estar todo certinho no Piperun:
+Pra que o boleto do consórcio saia pro cliente todo dia 10, o deal dele precisa estar em ordem no Piperun **antes** do cron rodar. Se faltar qualquer coisa, ele é pulado silenciosamente (só aparece no summary do log).
 
 ### 1. Estar na stage correta
 
-Deal do cliente ativo deve estar na stage `679217` (configurável via `PIPERUN_BOLETOS_STAGE_ID`). Deals em outras stages são ignorados pelo cron.
+Deal do cliente ativo do consórcio deve estar na stage **`679217` — "Consórcio ativo"** (configurável via `PIPERUN_BOLETOS_STAGE_ID`). Deals em qualquer outra stage são ignorados pelo cron.
+
+**Quando mover pra essa stage:** logo depois do cliente assinar o contrato de consórcio e o cadastro no Canopus estar concluído (não adianta mover antes — o `find-cota/{cpf}` vai retornar vazio).
+
+**Filtro adicional (desde PR #107):** o bot pede `deleted=0&freezed=0` na query. Deals soft-deleted ou congelados no CRM **não** aparecem no cron, mesmo estando nominalmente na stage.
 
 ### 2. Campos da pessoa preenchidos
 
-| Campo Piperun | Uso | Se faltar |
+Bot lê a **pessoa** do deal (não o deal). Campos necessários:
+
+| Campo Piperun | Uso | Se faltar → summary mostra |
 |---|---|---|
-| CPF | Chamada `find-cota/{cpf}` no Canopus | `sem_cpf` no summary, cliente pulado |
-| Telefone (contato principal) | Envio pelo WhatsApp | `sem_telefone` no summary, cliente pulado |
+| CPF | Chamada `find-cota/{cpf}` no Canopus | `sem_cpf: N` |
+| Telefone (contato principal) | Envio pelo WhatsApp | `sem_telefone: N` |
 
-**CPF sem formatação ou com pontuação — tanto faz** (bot normaliza). Mas **precisa ser um CPF cadastrado no Canopus** (senão retorna `sem_cotas` — cliente não é do consórcio ou ainda não foi cadastrado lá).
+#### Formato do CPF
 
-### 3. Telefone válido no WhatsApp
+Bot normaliza (`String(cpf).replace(/\D/g, "")`) — aceita qualquer formato:
 
-Bot faz `sock.onWhatsApp(phone)` — se número não existe no WhatsApp, `fora_do_whatsapp` no summary e pula.
+✅ `123.456.789-09` → 11 dígitos
+✅ `12345678909` → 11 dígitos
+✅ `123 456 789 09` → 11 dígitos (bot tira espaços)
+
+❌ CPF com dígito faltando ou parcial (só 10 dígitos) → `throw new Error("CPF inválido (esperado 11 dígitos)")` no log
+
+⚠️ **CPF precisa estar cadastrado no Canopus.** Não basta ter no Piperun. Se o cliente ainda não foi cadastrado no consórcio, o `find-cota` retorna vazio → summary mostra `sem_cotas: N`.
+
+#### Formato do telefone
+
+Piperun aceita máscara `(84) 99164-6369` — Baileys normaliza. Depois o bot faz `sock.onWhatsApp(phone)` — se **o número não existe no WhatsApp**, summary mostra `fora_do_whatsapp: N` e cliente é pulado.
+
+**Erros comuns de telefone:**
+- Cliente deu o fixo em vez do celular
+- Número antigo/desativado
+- Faltando o 9 do celular (Piperun aceita, mas WhatsApp não valida)
+
+### 3. Cliente precisa ter parcela pagável no mês
+
+Mesmo que tudo esteja OK no CRM e no Canopus, se o cliente **não tem parcela vencendo** nesse ciclo, o bot registra `sem_bills` e não envia mensagem nenhuma. Isso é **comportamento correto**, não bug.
+
+Exemplos reais (10/07/2026):
+
+**Caso Kaique (deal 57530999)** — só tinha bill DIF:
+- Canopus retornou 1 cota no grupo 008310
+- `generateBills` devolveu 1 bill com `parcelNumber = "DIF"` (correção monetária, R$ 0)
+- Bot filtra DIF automaticamente → nada pra enviar → `sem_bills`
+- **Ação:** nenhuma. Quando ele tiver parcela real, o bot envia.
+
+**Caso Paula (deal 58846358)** — múltiplas cotas sem parcela ativa:
+- 4 cotas no grupo 006660 (292, 286, 287, 289)
+- Nenhuma delas com parcela cobrável — cliente em dia
+- Confirmado direto no site da Canopus: colunas Parcela/Vencimento/Valor vazias em todas
+- **Ação:** nenhuma.
 
 ### O que o consultor deve fazer
 
-- **Ao onboardar cliente novo do consórcio**: garantir que o deal foi movido pra stage `679217`, e que CPF + telefone estão preenchidos.
-- **Ao trocar telefone do cliente**: atualizar no Piperun antes do dia 10 do mês.
-- **Se cliente saiu do consórcio**: mover pra outra stage, ou o cron continuará tentando (não faz mal, mas polui log).
+| Quando | Ação no CRM |
+|---|---|
+| Onboarding de cliente novo do consórcio | Mover deal pra stage `679217` **depois** que o cadastro no Canopus estiver concluído. Confirmar CPF + telefone preenchidos na pessoa |
+| Cliente trocou de telefone | Atualizar em "Contatos → Telefone principal" antes do dia 10 do mês |
+| Cliente saiu do consórcio | Mover pra outra stage (ex: "Encerrado") ou marcar `deleted` no CRM. O cron para de tentar |
+| Cliente com `sem_cotas` no summary | Confirmar CPF no Piperun bate com CPF cadastrado no Canopus. Se bate e ainda dá sem_cotas, cliente não tá cadastrado no consórcio |
+| Cliente com `sem_bills` recorrente | Investigar direto no site da Canopus (`consorciocanopus.com.br`) — se ele realmente não tem parcela pagável, tá tudo certo |
+
+### Checklist antes do dia 10
+
+- [ ] Todos os clientes ativos estão em `679217`
+- [ ] Nenhum cliente encerrado ficou nessa stage
+- [ ] CPF preenchido em todas as pessoas
+- [ ] Telefone principal preenchido e válido (celular com 9, em uso, no WhatsApp)
+- [ ] Nenhum deal marcado como `deleted` ou `freezed` que deveria estar ativo
 
 ## Componentes
 
