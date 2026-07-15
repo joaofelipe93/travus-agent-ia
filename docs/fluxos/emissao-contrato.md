@@ -15,51 +15,115 @@ Webhook `POST /webhook/piperun/emissao-contrato` disparado pelo Piperun quando d
 
 Sem os dados abaixo o webhook chega, o bot alerta o consultor no WhatsApp e **não emite os boletos**. Nenhum deles pode ficar vazio.
 
+> **Regra de ouro:** preencher **na pessoa do deal**, não no deal em si. O Piperun tem campos duplicados — o bot só olha os da pessoa.
+
 ### 1. Valor e parcelas — campo "Observação" da PESSOA
 
-⚠️ Piperun tem 2 campos "Observação": um do **deal** (log automático, o bot ignora) e um da **pessoa** (editável). O bot lê da pessoa.
+⚠️ Piperun tem 2 campos "Observação": um do **deal** (log automático, o bot ignora) e um da **pessoa** (editável). **O bot lê da pessoa** ([extractObservationFromPerson](../../src/api/piperun-api.js)).
 
 Formato esperado (regex `R\$\s*([\d.,]+)\s*x\s*(\d+)`):
 
 ```
-Valor da consultoria: R$ 300 x 12
+Valor do contrato de consultoria:
+R$ 300 x 12
 ```
 
-Aceita variações: `R$300 x12`, `R$ 1.500,00 x 6`, `R$1.234,56x24`.
+#### Template pronto pra copiar
 
-**Modo cortesia** (contrato sem cobrança): preenche `Sem cobrança` no lugar. Bot pula a Inter, envia só o contrato (com Cláusula 4ª removida em memória).
+**Cobrança normal:**
+```
+Valor do contrato de consultoria:
+R$ {VALOR} x {PARCELAS}
+```
+
+Exemplos que funcionam:
+```
+R$ 300 x 12                    ← R$ 300,00 em 12 parcelas
+R$300 x12                      ← sem espaços, tudo bem
+R$ 1.500,00 x 6                ← ponto de milhar + vírgula decimal ok
+R$1.234,56x24                  ← tudo grudado, tudo bem
+R$ 500 X 10                    ← X maiúsculo NÃO funciona (regex é minúsculo)
+```
+
+**Cobrança em cortesia** (contrato sem boletos):
+```
+Sem cobrança
+```
+
+Basta essa frase em qualquer lugar da observação. O bot detecta ([parseCortesia](../../src/api/webhook-emissao-contrato.js)), pula a Inter e envia só o contrato com a Cláusula 4ª (pagamento) removida em memória.
+
+#### Erros comuns na observação
+
+| ❌ Errado | Por que | ✅ Corrigido |
+|---|---|---|
+| `R$300 por 12` | "por" não bate na regex (espera `x`) | `R$300 x 12` |
+| `12x de R$300` | Ordem invertida | `R$300 x 12` |
+| `R$ 300 X 12` | `X` maiúsculo não bate | `R$ 300 x 12` |
+| `R$ 300,00 x 12 meses` | O `12 meses` é OK (regex captura só até o primeiro grupo de dígitos), mas evite ambiguidade | `R$ 300 x 12` |
+| Só `300 x 12` (sem R$) | Falta o `R$` obrigatório na regex | `R$ 300 x 12` |
+| Escreveu no **deal** e não na **pessoa** | Bot não lê o deal | Copiar pra pessoa |
 
 ### 2. Dados do pagador (obrigatórios pela Inter)
 
-Na pessoa do deal, todos os campos abaixo precisam estar preenchidos:
+Na **pessoa** do deal, todos os campos abaixo precisam estar preenchidos:
 
-| Campo Piperun | Exemplo | Nota |
+| Campo Piperun | Exemplo válido | Nota |
 |---|---|---|
-| CPF | `123.456.789-09` | Só dígitos, ou com pontuação — bot normaliza |
-| Endereço → Rua | `Avenida Moema Tinoco da Cunha Lima` | Sem número |
-| Endereço → Número | `883` | Opcional (bot usa só o que tiver) |
-| Endereço → CEP | `59133-090` | 8 dígitos após limpar pontuação |
+| CPF | `123.456.789-09` ou `12345678909` | Bot normaliza (só usa dígitos). CPF precisa ser válido — Inter valida |
+| Endereço → Rua | `Avenida Moema Tinoco da Cunha Lima` | Só o nome da rua, sem número |
+| Endereço → Número | `883` | Opcional. Se vazio, bot manda só a rua |
+| Endereço → CEP | `59133-090` ou `59133090` | 8 dígitos após tirar hífen |
 | Endereço → Bairro | `Pajuçara` | |
-| Cidade | Natal/RN | Piperun exige cadastro estruturado (cidade + UF) |
-| Telefone (contato principal) | `(84) 99164-6369` | Precisa **existir no WhatsApp** também |
-| E-mail (contato principal) | `joao@dominio.com` | Opcional, mas recomendado |
+| Cidade | Selecionar `Natal/RN` no autocomplete | Piperun tem cadastro estruturado — não vale digitar texto livre |
+| Telefone (contato principal) | `(84) 99164-6369` | **Precisa existir no WhatsApp** (validado antes de emitir) |
+| E-mail (contato principal) | `joao@dominio.com` | Opcional, mas recomendado — aparece no boleto |
+
+#### Exemplo completo de pessoa preenchida corretamente
+
+```
+Nome:           João Felipe Rodrigues da Silva
+CPF:            123.456.789-09
+Sexo:           Masculino
+E-mail:         joao@dominio.com
+Telefone:       (84) 99164-6369      ← contato marcado como "principal"
+Endereço:
+  Rua:          Avenida Moema Tinoco da Cunha Lima
+  Número:       883
+  Bairro:       Pajuçara
+  CEP:          59133-090
+  Cidade:       Natal/RN             ← autocomplete estruturado
+Observação:     Valor do contrato de consultoria:
+                R$ 300 x 12
+```
 
 ### 3. Gênero (opcional, mas melhora o contrato)
 
 Campo Piperun: `Sexo` / `Gênero` da pessoa. Aceita `Masculino` ou `Feminino`.
 
-- `Masculino` → contrato usa "brasileiro", "inscrito", "assessorá-lo", "informado"
+- `Masculino` → contrato usa **"brasileiro"**, **"inscrito"**, **"assessorá-lo"**, **"informado"**
 - `Feminino` OU vazio → usa versão feminina (default)
+
+Se o cliente é homem e o campo ficar vazio, o contrato sai no feminino ("brasileira", "inscrita"). O boleto sai normal.
 
 ### Como o bot reage se faltar algo
 
 | Faltando | Bot faz |
 |---|---|
-| Observação com `R$X xN` ou `Sem cobrança` | Alerta consultor por WhatsApp e para |
-| CPF, endereço, bairro, CEP, cidade ou UF | Alerta consultor por WhatsApp e para |
+| Observação com `R$X xN` ou `Sem cobrança` | Alerta consultor por WhatsApp e para. Boletos NÃO são emitidos |
+| CPF, endereço, bairro, CEP, cidade ou UF | Alerta consultor por WhatsApp com lista dos campos faltantes e para |
 | Telefone | Alerta consultor por WhatsApp e para |
-| Telefone não existe no WhatsApp | Alerta consultor por WhatsApp e para |
-| Gênero | Assume feminino (default) e continua |
+| Telefone não existe no WhatsApp | Alerta consultor por WhatsApp e para. Cliente pode ter dado número fixo, número antigo ou de outro app |
+| Gênero | Assume feminino (default) e continua sem alerta |
+
+Depois de corrigir no CRM, mover o deal **pra fora** da stage "Emissão de Contrato" e depois **de volta** — isso reenvia o webhook. Se preferir, pedir ao suporte técnico pra reprocessar direto no banco.
+
+### Checklist rápido antes de mover pra "Emissão de Contrato"
+
+- [ ] Pessoa tem CPF válido (11 dígitos)
+- [ ] Pessoa tem telefone principal marcado, e o número existe no WhatsApp
+- [ ] Endereço completo: rua, bairro, CEP, cidade (autocomplete)
+- [ ] Observação da **pessoa** (não do deal) tem `R$ X x N` OU `Sem cobrança`
+- [ ] Sexo/Gênero preenchido se for homem
 
 ## Componentes
 
