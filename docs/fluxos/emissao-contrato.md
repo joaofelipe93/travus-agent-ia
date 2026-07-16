@@ -67,31 +67,31 @@ Basta essa frase em qualquer lugar da observação. O bot detecta ([parseCortesi
 
 Na **pessoa** do deal, todos os campos abaixo precisam estar preenchidos:
 
-| Campo Piperun | Exemplo válido | Nota |
+| Campo Piperun | Formato aceito | Nota |
 |---|---|---|
-| CPF | `123.456.789-09` ou `12345678909` | Bot normaliza (só usa dígitos). CPF precisa ser válido — Inter valida |
-| Endereço → Rua | `Avenida Moema Tinoco da Cunha Lima` | Só o nome da rua, sem número |
-| Endereço → Número | `883` | Opcional. Se vazio, bot manda só a rua |
-| Endereço → CEP | `59133-090` ou `59133090` | 8 dígitos após tirar hífen |
-| Endereço → Bairro | `Pajuçara` | |
-| Cidade | Selecionar `Natal/RN` no autocomplete | Piperun tem cadastro estruturado — não vale digitar texto livre |
-| Telefone (contato principal) | `(84) 99164-6369` | **Precisa existir no WhatsApp** (validado antes de emitir) |
-| E-mail (contato principal) | `joao@dominio.com` | Opcional, mas recomendado — aparece no boleto |
+| CPF | `NNN.NNN.NNN-NN` ou `NNNNNNNNNNN` | Bot normaliza (só usa dígitos). CPF precisa ser válido — Inter valida |
+| Endereço → Rua | Nome completo da rua/avenida | Só o nome, sem número |
+| Endereço → Número | Número do imóvel | Opcional. Se vazio, bot manda só a rua |
+| Endereço → CEP | `NNNNN-NNN` ou `NNNNNNNN` | 8 dígitos após tirar hífen |
+| Endereço → Bairro | Nome do bairro | |
+| Cidade | Selecionar cidade/UF no autocomplete | Piperun tem cadastro estruturado — não vale digitar texto livre |
+| Telefone (contato principal) | `(XX) 9NNNN-NNNN` | **Precisa existir no WhatsApp** (validado antes de emitir) |
+| E-mail (contato principal) | `nome@dominio.com` | Opcional, mas recomendado — aparece no boleto |
 
-#### Exemplo completo de pessoa preenchida corretamente
+#### Exemplo de pessoa preenchida corretamente (com placeholders)
 
 ```
-Nome:           João Felipe Rodrigues da Silva
-CPF:            123.456.789-09
-Sexo:           Masculino
-E-mail:         joao@dominio.com
-Telefone:       (84) 99164-6369      ← contato marcado como "principal"
+Nome:           <Nome completo do lead>
+CPF:            NNN.NNN.NNN-NN
+Sexo:           Masculino | Feminino
+E-mail:         <lead@dominio.com>
+Telefone:       (XX) 9NNNN-NNNN      ← contato marcado como "principal"
 Endereço:
-  Rua:          Avenida Moema Tinoco da Cunha Lima
-  Número:       883
-  Bairro:       Pajuçara
-  CEP:          59133-090
-  Cidade:       Natal/RN             ← autocomplete estruturado
+  Rua:          <Nome da rua/avenida>
+  Número:       <número>
+  Bairro:       <bairro>
+  CEP:          NNNNN-NNN
+  Cidade:       <Cidade>/<UF>        ← autocomplete estruturado
 Observação:     Valor do contrato de consultoria:
                 R$ 300 x 12
 ```

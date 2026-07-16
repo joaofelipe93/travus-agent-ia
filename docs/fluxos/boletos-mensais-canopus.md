@@ -52,18 +52,18 @@ Piperun aceita máscara `(84) 99164-6369` — Baileys normaliza. Depois o bot fa
 
 Mesmo que tudo esteja OK no CRM e no Canopus, se o cliente **não tem parcela vencendo** nesse ciclo, o bot registra `sem_bills` e não envia mensagem nenhuma. Isso é **comportamento correto**, não bug.
 
-Exemplos reais (10/07/2026):
+Dois cenários que geram `sem_bills` legítimo:
 
-**Caso Kaique (deal 57530999)** — só tinha bill DIF:
-- Canopus retornou 1 cota no grupo 008310
-- `generateBills` devolveu 1 bill com `parcelNumber = "DIF"` (correção monetária, R$ 0)
+**Cenário A — cliente só tem bill de correção monetária (DIF):**
+- Canopus retorna 1 cota
+- `generateBills` devolve 1 bill com `parcelNumber = "DIF"` (correção monetária, R$ 0)
 - Bot filtra DIF automaticamente → nada pra enviar → `sem_bills`
 - **Ação:** nenhuma. Quando ele tiver parcela real, o bot envia.
 
-**Caso Paula (deal 58846358)** — múltiplas cotas sem parcela ativa:
-- 4 cotas no grupo 006660 (292, 286, 287, 289)
-- Nenhuma delas com parcela cobrável — cliente em dia
-- Confirmado direto no site da Canopus: colunas Parcela/Vencimento/Valor vazias em todas
+**Cenário B — cliente em dia, múltiplas cotas sem parcela ativa:**
+- Canopus retorna várias cotas
+- Nenhuma delas com parcela cobrável nesse ciclo (cliente pagou antecipado, ou o grupo não emitiu ainda)
+- Confirmável direto no site da Canopus: colunas Parcela/Vencimento/Valor vazias
 - **Ação:** nenhuma.
 
 ### O que o consultor deve fazer

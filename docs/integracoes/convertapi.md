@@ -70,7 +70,7 @@ import { writeFileSync } from 'node:fs';
 const buf = await renderContratoPdf({
   person: { name: 'Teste', cpf: '12345678909', gender: 'Feminino',
     address: { street: 'X', number: '1', district: 'Y', postal_code: '00000000' },
-    city: { name: 'Natal', uf: 'RN' } },
+    city: { name: 'Cidade', uf: 'UF' } },
   valor: 300, parcelas: 3,
   vencimentos: ['2026-07-01','2026-08-01','2026-09-01']
 });

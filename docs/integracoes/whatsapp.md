@@ -41,7 +41,7 @@ handler.handleMessage
 
 WhatsApp Web multi-device introduziu **LID** (Linked Device ID, anonimizado):
 
-- `msg.key.remoteJid` pode vir como `152260986314941@lid` ao invés de `558491646369@s.whatsapp.net`
+- `msg.key.remoteJid` pode vir como `NNNNNNNNNNNNNN@lid` ao invés de `55XX9NNNNNNNN@s.whatsapp.net`
 - Nosso banco indexa por telefone (PN), então **resolvemos LID → PN** na entrada usando `sock.signalRepository.lidMapping.getPNForLID(lid)`
 - Se não resolver, cai no `@lid` mesmo (degradação graciosa) — mas isso quebra idempotência de contatos que também aparecem via PN
 
