@@ -43,15 +43,15 @@ Emissão e consulta de boletos via API v3 do Banco Inter. Usada pelo [fluxo de e
   "pagador": {
     "cpfCnpj": "12345678909",             // só dígitos
     "tipoPessoa": "FISICA",
-    "nome": "João Felipe...",
-    "email": "joao@...",
-    "ddd": "84",
-    "telefone": "991646369",
-    "endereco": "Rua X, nº 123",
-    "bairro": "Centro",
-    "cidade": "Natal",
-    "uf": "RN",
-    "cep": "59133090"
+    "nome": "<Nome do pagador>",
+    "email": "<pagador@dominio.com>",
+    "ddd": "XX",
+    "telefone": "9NNNNNNNN",
+    "endereco": "<Rua/Avenida>, nº <número>",
+    "bairro": "<Bairro>",
+    "cidade": "<Cidade>",
+    "uf": "<UF>",
+    "cep": "NNNNNNNN"
   },
   "multa": { "taxa": 2, "codigo": "PERCENTUAL" },
   "mora": { "taxa": 1, "codigo": "TAXAMENSAL" }

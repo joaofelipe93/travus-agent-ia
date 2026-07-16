@@ -8,17 +8,17 @@ Scheduler `startMeetingReminderScheduler` roda a cada **2 minutos**, consulta o 
 
 ## Pré-requisitos no Google Calendar
 
-Diferente dos outros fluxos, aqui a preparação é no **Google Calendar do consultor** (`luiz.muniz@travuscapital.com.br`), não no Piperun. Duas situações:
+Diferente dos outros fluxos, aqui a preparação é no **Google Calendar do consultor** (email configurado em `GOOGLE_CALENDAR_ID`), não no Piperun. Duas situações:
 
 ### Situação A — Event criado pelo bot (durante agendamento com a Ana)
 
 **Nada a fazer manualmente.** A Ana cria o event automaticamente ao capturar o lead completo, injetando o telefone na descrição em formato `55XXXXXXXXXXX` e mantendo o link do Meet. Fica assim:
 
 ```
-Título:      Lead WhatsApp - João Felipe
-Descrição:   Celular: 558491646369
-             Email: joao@dominio.com
-             Renda mensal: R$ 15.000
+Título:      Lead WhatsApp - <Nome do Lead>
+Descrição:   Celular: 55XXNNNNNNNNN
+             Email: <email do lead>
+             Renda mensal: R$ <valor>
 ```
 
 ### Situação B — Consultor cria event à mão (reunião extra, reagendamento, indicação)
@@ -31,22 +31,21 @@ No **título OU na descrição** (qualquer um dos dois basta), o número precisa
 
 ✅ **Aceita** (13 dígitos — DDI + DDD + 9 dígitos):
 ```
-558491646369
-5511987654321
+55XX9NNNNNNNN    (ex: 55119NNNNNNNN)
 ```
 
 ✅ **Aceita** (12 dígitos — DDI + DDD + 8 dígitos, fixo):
 ```
-5584991646369    (celular 9 dígitos → 13 total)
-558432214567     (fixo 8 dígitos → 12 total)
+55XX9NNNNNNNN    (celular 9 dígitos → 13 total)
+55XXNNNNNNNN     (fixo 8 dígitos → 12 total)
 ```
 
 ❌ **NÃO aceita** (bot ignora o evento):
 ```
-55 84 99164-6369     ← tem espaço e hífen
-+55 84 9 9164-6369   ← tem + e espaços
-(84) 99164-6369      ← falta o 55 na frente
-84 99164-6369        ← falta o 55 e tem espaço
+55 XX 9NNNN-NNNN     ← tem espaço e hífen
++55 XX 9 NNNN-NNNN   ← tem + e espaços
+(XX) 9NNNN-NNNN      ← falta o 55 na frente
+XX 9NNNN-NNNN        ← falta o 55 e tem espaço
 ```
 
 #### 2. Link do Google Meet (`hangoutLink`)
@@ -70,45 +69,44 @@ Nesse caso o lembrete **não sai**. Ver seção "Casos que exigem ação" abaixo
 Call Travus — {NOME DO LEAD} 55{DDD}{NÚMERO}
 ```
 
-Exemplo real:
+Exemplo (com placeholders):
 ```
-Call Travus — João Felipe 558491646369
+Call Travus — <Nome do Lead> 55XX9NNNNNNNN
 ```
 
 **Descrição** (formato recomendado, opcional se telefone já tá no título):
 ```
 Consultoria financeira.
-Contato: 558491646369
-Origem: indicação Fulano
+Contato: 55XX9NNNNNNNN
+Origem: indicação
 ```
 
-### Caso real que deu errado — evento da Miriam (10/07/2026)
+### Padrão que falha — evento manual sem telefone
 
-O Luiz criou manualmente um evento assim:
+Padrão comum de erro: consultor cria evento com título genérico e nome do lead entre parênteses na descrição, sem o telefone em formato E.164.
 
 ```
 Título:      1ª Reunião
-Descrição:   (MIRIAM SEGANTINI)
+Descrição:   (NOME DO LEAD)
 Meet:        sim
 ```
 
 Resultado no log do bot:
 ```
-[REMINDER] aviso: evento com Meet sem WhatsApp identificável: "1ª Reunião" (id=1aek5arolp57vgqucibioesrvs)
+[REMINDER] aviso: evento com Meet sem WhatsApp identificável: "1ª Reunião" (id=<eventId>)
 ```
 
-**Por que falhou:** nem `1ª Reunião` nem `(MIRIAM SEGANTINI)` contêm um número no formato `55XXXXXXXXXXX`. O bot não tem como associar o evento à Miriam — o nome não é usado como chave (nome comum tem chance de bater com lead errado).
+**Por que falha:** nem o título nem a descrição contêm um número no formato `55XXXXXXXXXXX`. O bot não tem como associar o evento ao lead — o nome não é usado como chave (nome comum tem chance de bater com lead errado).
 
-**Como deveria ter sido criado** (mesmo evento, corrigido):
+**Como deveria ser criado** (mesmo evento, corrigido):
 
 ```
-Título:      1ª Reunião — Miriam Segantini 5584991234567
-Descrição:   (MIRIAM SEGANTINI)
-             Contato: 5584991234567
+Título:      1ª Reunião — <Nome do Lead> 55XX9NNNNNNNN
+Descrição:   Contato: 55XX9NNNNNNNN
 Meet:        sim
 ```
 
-Com isso o bot acharia a Miriam na tabela `leads` (ela já recebeu boletos, portanto tem registro), e dispararia os lembretes D-1 → dia → T-15min.
+Com isso o bot acharia o lead na tabela `leads` (se ele já passou pelo bot) e dispararia os lembretes D-1 → dia → T-15min.
 
 ### Casos que exigem ação do consultor
 
@@ -186,7 +184,7 @@ Se o lead **respondeu depois do último lembrete enviado**, o próximo é pulado
 ## Como testar
 
 Cria event no Google Calendar do consultor com:
-- Título ou descrição contendo um número no formato `558491646369`
+- Título ou descrição contendo um número no formato `55XX9NNNNNNNN`
 - Link do Meet (Calendar cria por padrão)
 - Startdate: amanhã às 15h (pra ver d1_afternoon/d1_evening)
 

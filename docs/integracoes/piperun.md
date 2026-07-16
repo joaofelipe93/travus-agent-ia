@@ -26,16 +26,16 @@ Piperun envia POST com JSON tipo:
   "pipeline": { "id": 101707, "name": "..." },
   "origin": { "id": 797972, "name": "LP V2" },
   "person": {
-    "id": 47567855,
-    "name": "João Felipe...",
-    "cpf": "123.456.789-09",
+    "id": <person_id>,
+    "name": "<Nome do Lead>",
+    "cpf": "NNN.NNN.NNN-NN",
     "gender": "Masculino",
-    "birth_day": "1993-09-08",
+    "birth_day": "AAAA-MM-DD",
     "observation": "Valor da consultoria: R$ 300 x12",   // PESSOA (usada pelo bot)
     "address": { "street": "...", "postal_code": "...", "number": "...", "district": "..." },
-    "city": { "id": 1165, "uf": "RN", "name": "Natal" },
+    "city": { "id": <city_id>, "uf": "<UF>", "name": "<Cidade>" },
     "contact_emails": [{ "address": "..." }],
-    "contact_phones": [{ "number": "5584991646369", "is_main": 1 }]
+    "contact_phones": [{ "number": "55XX9NNNNNNNN", "is_main": 1 }]
   }
 }
 ```

@@ -35,8 +35,8 @@ O `subject` é o que faz DWD — sem ele, a auth funciona mas o Calendar retorna
 
 ```json
 {
-  "summary": "Travus Capital — João Felipe",
-  "description": "Lead: 5511999999999\n(gerado pelo bot)",
+  "summary": "Travus Capital — <Nome do Lead>",
+  "description": "Lead: 55XX9NNNNNNNN\n(gerado pelo bot)",
   "start": { "dateTime": "2026-06-24T10:00:00-03:00", "timeZone": "America/Sao_Paulo" },
   "end":   { "dateTime": "2026-06-24T11:00:00-03:00", "timeZone": "America/Sao_Paulo" },
   "conferenceData": { "createRequest": { ... } }
