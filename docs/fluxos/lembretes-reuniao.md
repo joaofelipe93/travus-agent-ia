@@ -155,14 +155,16 @@ O scheduler consulta o Calendar a cada **2 minutos** e olha apenas eventos das p
 
 ## Templates de mensagem
 
-| Tipo | Texto (resumo) |
+Placeholders internos: `${nome}`, `${hora}` (ex: "16h" ou "16:30"), `${data}` (DD/MM), `${meetLink}`, `${when}` ("hoje" ou "amanhã", só no `immediate`).
+
+| Tipo | Texto |
 |---|---|
-| `immediate` | "Tô confirmando nossa call hoje/amanhã às XX. Segue o link do Meet: ..." |
-| `d1_morning` | "Bom dia! Já tá tudo pronto pra amanhã às XX. Tenha um ótimo dia!" |
-| `d1_afternoon` | "Viu minha última mensagem?" |
-| `d1_evening` | "Não sei se houve algum imprevisto, que tal remarcarmos?" |
-| `day_morning` | "Bom dia! Deixar o link da call abaixo das XX. Até daqui a pouco!" |
-| `t15min` | "Já já estou entrando na sala ☺️" |
+| `immediate` | "Olá, {nome}! Tô confirmando nossa call {hoje/amanhã} às {hora} ☺️\n\nSegue o Link do Meet: {meetLink}\n\n{Até logo/Até amanhã}!" |
+| `d1_morning` | "Olá, {nome}, Bom dia! Tudo bom?\n\nJá estamos com tudo pronto para te apresentar amanhã, {data}, as {hora}hrs.\n\nTenha um ótimo dia!" |
+| `d1_afternoon` | "{nome}, viu minha última mensagem?" |
+| `d1_evening` | "{nome}, não sei se houve algum imprevisto, mas como trabalhamos com horário marcado e não conseguimos contato com você, que tal remarcarmos?" |
+| `day_morning` | "Oi {nome}, Bom dia! Deixar o link da call abaixo das {hora}hrs. Até daqui a pouco, e um excelente dia!\n{meetLink}" |
+| `t15min` | "Oi {nome}, nosso especialista que falará com você, que é o {CONSULTOR_NOME}, em 15 minutos já estará na sala." (se `CONSULTOR_NOME` vazio, cai em "nosso especialista que falará com você em 15 minutos já estará na sala") |
 
 ## Idempotência
 
