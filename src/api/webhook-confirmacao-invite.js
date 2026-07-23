@@ -3,6 +3,8 @@ import {
   hasWebhookDispatched,
   recordWebhookDispatch,
   phoneFromJid,
+  getOrStartConversation,
+  recordLeadCapture,
 } from "../db.js";
 import { enqueue } from "../whatsapp/queue.js";
 import { sendWithPresence } from "../whatsapp/presence.js";
@@ -34,6 +36,11 @@ function pickPhone(contactPhones) {
   const main = contactPhones.find((p) => p?.is_main === true || p?.is_main === 1);
   const chosen = main ?? contactPhones[0];
   return chosen?.number ?? null;
+}
+
+function pickEmail(contactEmails) {
+  if (!Array.isArray(contactEmails) || contactEmails.length === 0) return null;
+  return contactEmails[0]?.address ?? null;
 }
 
 function renderTemplate(tpl, vars) {
@@ -69,6 +76,7 @@ export async function confirmacaoInviteWebhookHandler(req, res) {
   const dealTitle = payload?.title;
   const nome = payload?.person?.name;
   const phone = pickPhone(payload?.person?.contact_phones);
+  const email = pickEmail(payload?.person?.contact_emails);
   const closedAt = payload?.closed_at;
 
   if (!personId || !stageId) {
@@ -138,9 +146,13 @@ export async function confirmacaoInviteWebhookHandler(req, res) {
       closedAt,
     });
 
+    let dataAgendamento = null;
+    let horaAgendamento = null;
     let message;
     if (event?.start?.dateTime) {
       const { data, hora } = formatEventDateTimeBRT(event.start.dateTime);
+      dataAgendamento = data;
+      horaAgendamento = hora;
       const tpl = process.env.CONFIRMACAO_INVITE_TEMPLATE ?? DEFAULT_TEMPLATE;
       message = renderTemplate(tpl, { primeiro_nome: primeiro, data, hora });
 
@@ -154,6 +166,20 @@ export async function confirmacaoInviteWebhookHandler(req, res) {
       console.warn(`[CONFIRMA-INVITE] evento não encontrado após retries para deal="${dealTitle}" — usando fallback`);
       const tpl = process.env.CONFIRMACAO_INVITE_FALLBACK_TEMPLATE ?? DEFAULT_FALLBACK_TEMPLATE;
       message = renderTemplate(tpl, { primeiro_nome: primeiro });
+    }
+
+    try {
+      const convId = getOrStartConversation(jid);
+      recordLeadCapture(convId, {
+        nome,
+        celular: canonicalPhone,
+        email,
+        data_agendamento: dataAgendamento,
+        hora_agendamento: horaAgendamento,
+      });
+      console.log(`[CONFIRMA-INVITE] lead registrado no DB: conv=${convId} celular=${canonicalPhone}`);
+    } catch (err) {
+      console.error(`[CONFIRMA-INVITE] falha ao registrar lead no DB: ${err?.message ?? err}`);
     }
 
     try {
