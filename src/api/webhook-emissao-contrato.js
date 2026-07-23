@@ -9,6 +9,8 @@ import {
   markContratoParcelaPdfSent,
   countContratoParcelas,
   getContratoParcelas,
+  recordLeadCapture,
+  updateLeadProfile,
 } from "../db.js";
 import { sendWithPresence } from "../whatsapp/presence.js";
 import { getSock } from "./index.js";
@@ -316,6 +318,29 @@ export async function emissaoContratoWebhookHandler(req, res) {
   const canonicalPhone = phoneFromJid(jid);
   ensureContact(canonicalPhone, jid);
   recordWebhookDispatch(personId, stageId, jid, canonicalPhone);
+
+  try {
+    const convId = getOrStartConversation(jid);
+    recordLeadCapture(convId, {
+      nome,
+      celular: canonicalPhone,
+      email: pickEmail(person),
+    });
+    updateLeadProfile(convId, {
+      cpf: person?.cpf ?? null,
+      data_nascimento: person?.birth_day ?? null,
+      gender: person?.gender ?? null,
+      endereco_rua: person?.address?.street ?? null,
+      endereco_numero: person?.address?.number ?? null,
+      endereco_bairro: person?.address?.district ?? null,
+      endereco_cep: person?.address?.postal_code ?? null,
+      endereco_cidade: person?.city?.name ?? null,
+      endereco_uf: person?.city?.uf ?? null,
+    });
+    console.log(`[CONTRATO] lead ${dealId} → perfil atualizado no DB (conv=${convId})`);
+  } catch (err) {
+    console.error(`[CONTRATO] falha ao atualizar perfil no DB: ${err?.message ?? err}`);
+  }
 
   const emitidas = [];
   const pdfs = [];

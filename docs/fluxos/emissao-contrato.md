@@ -131,7 +131,7 @@ Depois de corrigir no CRM, mover o deal **pra fora** da stage "Emissão de Contr
 - `src/integrations/inter.js` — OAuth mTLS + createCobranca + getBoletoPdf
 - `src/integrations/contrato-template.js` — render docx via `docxtemplater` + PDF via ConvertAPI
 - `src/assets/contrato-template.docx` — template (gitignored)
-- `src/db.js` — `boletos_contrato_parcelas` (idempotência + rastreio)
+- `src/db.js` — `boletos_contrato_parcelas` (idempotência + rastreio), `leads` (perfil completo via `updateLeadProfile`)
 
 ## Sequência
 
@@ -144,6 +144,9 @@ Depois de corrigir no CRM, mover o deal **pra fora** da stage "Emissão de Contr
 6. Valida pagador: CPF, endereço, bairro, CEP, cidade, UF
 7. Valida telefone existe no WhatsApp
 8. ensureContact + recordWebhookDispatch
+8b. getOrStartConversation + recordLeadCapture (baseline) + updateLeadProfile
+    → persiste cpf, data_nascimento, gender, endereço completo em `leads`
+    (sempre sobrescreve — CRM é fonte da verdade)
 
 9. Se NÃO cortesia:
    a. Loop emite N cobranças na Inter (500ms entre cada)
@@ -163,6 +166,19 @@ Depois de corrigir no CRM, mover o deal **pra fora** da stage "Emissão de Contr
     - Contrato (.pdf ou .docx)
     - Se não cortesia: PDF da parcela 1
 ```
+
+## Bônus: DB `leads` recebe perfil completo do lead
+
+Após validar o pagador com sucesso, o handler faz:
+
+- `recordLeadCapture` — cria linha em `leads` se ainda não existir (baseline: nome + celular + email)
+- `updateLeadProfile` — sobrescreve 9 colunas com dados vindos do payload:
+  - `cpf`, `data_nascimento`, `gender`
+  - `endereco_rua`, `endereco_numero`, `endereco_bairro`, `endereco_cep`, `endereco_cidade`, `endereco_uf`
+
+**Política:** sempre sobrescreve valores existentes (CRM é fonte da verdade). Se um campo estiver ausente no payload → grava `null` (não bloqueia).
+
+Isso não muda o contrato — ele continua sendo renderizado a partir do payload. O DB é espelho pra consultas do agente e outros pontos do sistema.
 
 ## Regras de vencimento das parcelas
 
