@@ -42,6 +42,10 @@ function formatHora(date) {
   return m === 0 ? `${h}h` : `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
+function formatData(date) {
+  return date.toLocaleDateString("pt-BR", { timeZone: TZ, day: "2-digit", month: "2-digit" });
+}
+
 function brasiliaDateParts(date) {
   const iso = date.toLocaleDateString("en-CA", { timeZone: TZ });
   const [y, m, d] = iso.split("-").map(Number);
@@ -81,7 +85,7 @@ function reminderSchedule(meetingStart) {
   };
 }
 
-function buildTemplate(type, nome, hora, meetLink, when) {
+function buildTemplate(type, nome, hora, meetLink, when, data) {
   const n = nome || "";
   switch (type) {
     case "immediate": {
@@ -89,15 +93,20 @@ function buildTemplate(type, nome, hora, meetLink, when) {
       return `Olá, ${n}! Tô confirmando nossa call ${when} às ${hora} ☺️\n\nSegue o Link do Meet: ${meetLink}\n\n${despedida}`;
     }
     case "d1_morning":
-      return `Olá ${n}, bom dia! Tudo bom? Já estamos com tudo pronto para amanhã às ${hora} te apresentar ☺️. Tenha um ótimo dia!`;
+      return `Olá, ${n}, Bom dia! Tudo bom?\n\nJá estamos com tudo pronto para te apresentar amanhã, ${data}, as ${hora}hrs.\n\nTenha um ótimo dia!`;
     case "d1_afternoon":
       return `${n}, viu minha última mensagem?`;
     case "d1_evening":
       return `${n}, não sei se houve algum imprevisto, mas como trabalhamos com horário marcado e não conseguimos contato com você, que tal remarcarmos?`;
     case "day_morning":
-      return `Oi ${n}, bom dia! Deixar o link da call abaixo das ${hora}. Até daqui a pouco, e um excelente dia!\n\n${meetLink}`;
-    case "t15min":
-      return `Oi ${n}, já já estou entrando na sala ☺️`;
+      return `Oi ${n}, Bom dia! Deixar o link da call abaixo das ${hora}hrs. Até daqui a pouco, e um excelente dia!\n${meetLink}`;
+    case "t15min": {
+      const consultorNomeado = process.env.CONSULTOR_NOME?.trim();
+      const especialista = consultorNomeado
+        ? `nosso especialista que falará com você, que é o ${consultorNomeado},`
+        : "nosso especialista que falará com você";
+      return `Oi ${n}, ${especialista} em 15 minutos já estará na sala.`;
+    }
     default:
       return null;
   }
@@ -156,6 +165,7 @@ async function runReminders() {
     const startTime = new Date(event.start.dateTime);
     const schedule = reminderSchedule(startTime);
     const hora = formatHora(startTime);
+    const data = formatData(startTime);
     const jid = lead.jid;
     const nome = firstName(lead.nome);
 
@@ -170,7 +180,7 @@ async function runReminders() {
       !hasAnyReminderSent(event.id)
     ) {
       const when = isSameBrasiliaDay(startTime, new Date(nowMs)) ? "hoje" : "amanhã";
-      const message = buildTemplate("immediate", nome, hora, event.hangoutLink, when);
+      const message = buildTemplate("immediate", nome, hora, event.hangoutLink, when, data);
       enqueue(jid, async () => {
         if (hasAnyReminderSent(event.id)) return;
         try {
@@ -197,7 +207,7 @@ async function runReminders() {
         if (hasUserMessageAfter(jid, prevSent)) continue;
       }
 
-      const message = buildTemplate(type, nome, hora, event.hangoutLink);
+      const message = buildTemplate(type, nome, hora, event.hangoutLink, null, data);
       if (!message) continue;
 
       enqueue(jid, async () => {
