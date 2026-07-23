@@ -153,6 +153,16 @@ ensureColumn("boletos_contrato_parcelas", "status_checked_at", "INTEGER");
 ensureColumn("boletos_contrato_parcelas", "atraso_level", "INTEGER NOT NULL DEFAULT 0");
 ensureColumn("boletos_contrato_parcelas", "atraso_notified_at", "INTEGER");
 
+ensureColumn("leads", "cpf", "TEXT");
+ensureColumn("leads", "data_nascimento", "TEXT");
+ensureColumn("leads", "gender", "TEXT");
+ensureColumn("leads", "endereco_rua", "TEXT");
+ensureColumn("leads", "endereco_numero", "TEXT");
+ensureColumn("leads", "endereco_bairro", "TEXT");
+ensureColumn("leads", "endereco_cep", "TEXT");
+ensureColumn("leads", "endereco_cidade", "TEXT");
+ensureColumn("leads", "endereco_uf", "TEXT");
+
 // bill.id da Canopus muda a cada generate-bill, então UNIQUE(deal_id, bill_id) nunca
 // dispara em re-run e o cron reenvia os mesmos boletos. Chave estável é
 // (deal_id, group_code, cota_code, parcel_number). Refs #109.
@@ -605,4 +615,34 @@ export function recordLeadCapture(conversationId, leadData) {
   );
 
   db.prepare("UPDATE conversations SET updated_at = unixepoch() WHERE id = ?").run(conversationId);
+}
+
+const LEAD_PROFILE_COLUMNS = [
+  "cpf",
+  "data_nascimento",
+  "gender",
+  "endereco_rua",
+  "endereco_numero",
+  "endereco_bairro",
+  "endereco_cep",
+  "endereco_cidade",
+  "endereco_uf",
+];
+
+export function updateLeadProfile(conversationId, fields) {
+  const entries = LEAD_PROFILE_COLUMNS
+    .filter((col) => fields[col] !== undefined)
+    .map((col) => [col, fields[col]]);
+  if (entries.length === 0) return false;
+
+  const setClause = entries.map(([col]) => `${col} = ?`).join(", ");
+  const values = entries.map(([, v]) => v);
+  const result = db
+    .prepare(`UPDATE leads SET ${setClause} WHERE conversation_id = ?`)
+    .run(...values, conversationId);
+
+  if (result.changes > 0) {
+    db.prepare("UPDATE conversations SET updated_at = unixepoch() WHERE id = ?").run(conversationId);
+  }
+  return result.changes > 0;
 }
