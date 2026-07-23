@@ -36,11 +36,12 @@ O bot **não depende** do evento ter o telefone na descrição — ele localiza 
 1. POST /webhook/piperun/confirmacao-invite
 2. Valida stage.id === 648386, status === 1, trigger_type esperado
 3. Extrai telefone via pickPhone(contact_phones) — fallback pro [0] se nenhum is_main
-4. hasWebhookDispatched(person_id, stage_id) → skip se já enviado
-5. sock.onWhatsApp(phone) → valida existência
-6. ensureContact + recordWebhookDispatch
-7. Responde 202 ao Piperun imediatamente (evita timeout)
-8. Enfileira job async (enqueue por jid):
+4. Extrai email via pickEmail(contact_emails) — primeiro do array
+5. hasWebhookDispatched(person_id, stage_id) → skip se já enviado
+6. sock.onWhatsApp(phone) → valida existência
+7. ensureContact + recordWebhookDispatch
+8. Responde 202 ao Piperun imediatamente (evita timeout)
+9. Enfileira job async (enqueue por jid):
    a. locateEventWithRetry (3× a cada 3s):
       - calendar.events.list({ q: deal.title, timeMin: now, timeMax: now+60d })
       - filtra por título contendo deal.title (ou firstName como fallback)
@@ -52,8 +53,26 @@ O bot **não depende** do evento ter o telefone na descrição — ele localiza 
       - renderiza CONFIRMACAO_INVITE_TEMPLATE
    c. Se não achou:
       - renderiza CONFIRMACAO_INVITE_FALLBACK_TEMPLATE (sem data/hora)
-   d. sendWithPresence(sock, jid, message)
+   d. getOrStartConversation(jid) → cria/reusa conversation
+   e. recordLeadCapture(convId, { nome, celular, email, data_agendamento, hora_agendamento })
+      → popula tabela `leads` (INSERT OR IGNORE — não duplica em reprocessamentos)
+   f. sendWithPresence(sock, jid, message)
 ```
+
+### Bônus: popula tabela `leads` automaticamente
+
+Antes desta feature, a tabela `leads` só era populada quando o agente Ana detectava lead qualificado via WhatsApp. Leads cadastrados direto no CRM pelo especialista ficavam fora do DB — o reminder scheduler não conseguia associar mensagens de contexto, etc.
+
+Agora, todo lead que passa pelo "Ganhar e Agendar" é inserido em `leads` com:
+
+| Campo | Origem |
+|---|---|
+| `conversation_id` | `getOrStartConversation(jid)` — cria conversa vazia se não existir |
+| `phone` / `celular` | Telefone canônico após validação no WhatsApp |
+| `nome` | `payload.person.name` |
+| `email` | `payload.person.contact_emails[0].address` |
+| `data_agendamento` | Do evento no Calendar (`DD/MM`) — null se evento não localizado |
+| `hora_agendamento` | Do evento no Calendar (`HHh` ou `HH:MM`) — null se evento não localizado |
 
 ## Templates
 
