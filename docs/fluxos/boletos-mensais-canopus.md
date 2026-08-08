@@ -4,11 +4,11 @@ Cron mensal que busca no Piperun os clientes de consórcio ativos, consulta a Ca
 
 ## Gatilho
 
-Cron `0 9 10 * *` — **dia 10 de cada mês às 09:00 BRT**.
+Cron `0 9 8 * *` — **dia 8 de cada mês às 09:00 BRT**.
 
 ## Pré-requisitos no CRM (cliente por cliente)
 
-Pra que o boleto do consórcio saia pro cliente todo dia 10, o deal dele precisa estar em ordem no Piperun **antes** do cron rodar. Se faltar qualquer coisa, ele é pulado silenciosamente (só aparece no summary do log).
+Pra que o boleto do consórcio saia pro cliente todo dia 8, o deal dele precisa estar em ordem no Piperun **antes** do cron rodar. Se faltar qualquer coisa, ele é pulado silenciosamente (só aparece no summary do log).
 
 ### 1. Estar na stage correta
 
@@ -71,12 +71,12 @@ Dois cenários que geram `sem_bills` legítimo:
 | Quando | Ação no CRM |
 |---|---|
 | Onboarding de cliente novo do consórcio | Mover deal pra stage `679217` **depois** que o cadastro no Canopus estiver concluído. Confirmar CPF + telefone preenchidos na pessoa |
-| Cliente trocou de telefone | Atualizar em "Contatos → Telefone principal" antes do dia 10 do mês |
+| Cliente trocou de telefone | Atualizar em "Contatos → Telefone principal" antes do dia 8 do mês |
 | Cliente saiu do consórcio | Mover pra outra stage (ex: "Encerrado") ou marcar `deleted` no CRM. O cron para de tentar |
 | Cliente com `sem_cotas` no summary | Confirmar CPF no Piperun bate com CPF cadastrado no Canopus. Se bate e ainda dá sem_cotas, cliente não tá cadastrado no consórcio |
 | Cliente com `sem_bills` recorrente | Investigar direto no site da Canopus (`consorciocanopus.com.br`) — se ele realmente não tem parcela pagável, tá tudo certo |
 
-### Checklist antes do dia 10
+### Checklist antes do dia 8
 
 - [ ] Todos os clientes ativos estão em `679217`
 - [ ] Nenhum cliente encerrado ficou nessa stage
@@ -144,7 +144,7 @@ Cada cota gera 2 bills: uma pagável (parcelNumber "014", "015", etc) e uma DIF 
 | Var | Default | Nota |
 |---|---|---|
 | `BOLETOS_ENABLED` | `true` | `false` desativa |
-| `BOLETOS_CRON` | `0 9 10 * *` | Expressão node-cron |
+| `BOLETOS_CRON` | `0 9 8 * *` | Expressão node-cron |
 | `PIPERUN_BOLETOS_STAGE_ID` | `679217` | Stage dos clientes ativos |
 | `BOLETOS_PACING_MS` | `3000` | Pacing entre clientes |
 | `BOLETOS_BILL_PACING_MS` | `1500` | Pacing entre bills do mesmo cliente |
@@ -172,5 +172,5 @@ Roda o fluxo completo sem esperar o cron.
 | HTTP 403 do Canopus | Proxy Render dormiu (cold start) ou IP foi barrado — retry resolve o cold start |
 | PDF retornado com magic ≠ `%PDF` | Cloudflare devolveu HTML de erro; retry resolve |
 | Cliente sem CPF | Preencher no CRM ou aceitar que ele não recebe automaticamente |
-| Cron não disparou dia 10 | Bot estava off — só roda quando PM2 tá up. Sem catch-up automático |
+| Cron não disparou dia 8 | Bot estava off — só roda quando PM2 tá up. Sem catch-up automático |
 | Summary com `sem_telefone: N` alto | Muitos leads no CRM sem telefone preenchido |

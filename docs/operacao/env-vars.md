@@ -43,7 +43,7 @@ Referência completa. Fonte da verdade: [`.env.example`](../../.env.example).
 
 | Var | Default | O que dispara |
 |---|---|---|
-| `BOLETOS_CRON` | `0 9 10 * *` | Cron mensal Canopus |
+| `BOLETOS_CRON` | `0 9 8 * *` | Cron mensal Canopus |
 | `BOLETOS_ENABLED` | `true` | Desativa cron Canopus |
 | `CONTRATO_REMINDER_CRON` | `0 9 * * *` | Cron diário parcelas contrato |
 | `CONTRATO_REMINDER_ENABLED` | `true` | Desativa cron parcelas |
