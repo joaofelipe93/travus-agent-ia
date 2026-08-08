@@ -14,7 +14,7 @@ Bot WhatsApp que qualifica leads da Travus Capital via agente Ana (OpenAI gpt-4o
 - [Emissão de contrato + boletos](./fluxos/emissao-contrato.md) — Inter + WhatsApp
 - [Lembretes de parcelas](./fluxos/lembretes-parcelas.md) — cron diário
 - [Baixa de pagamento e atrasos](./fluxos/baixa-pagamento.md) — cron diário + D+1/D+5/D+15
-- [Boletos mensais do consórcio](./fluxos/boletos-mensais-canopus.md) — cron dia 10
+- [Boletos mensais do consórcio](./fluxos/boletos-mensais-canopus.md) — cron dia 8
 - [Follow-ups da Ana](./fluxos/follow-ups.md) — bot retoma conversa parada
 - [Lembretes de reunião](./fluxos/lembretes-reuniao.md) — D-1, dia, T-15min
 

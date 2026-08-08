@@ -2,7 +2,7 @@ import cron from "node-cron";
 import { runMonthlyBoletos } from "../jobs/monthly-boletos.js";
 import { getSock } from "../api/index.js";
 
-const DEFAULT_SCHEDULE = "0 9 10 * *";
+const DEFAULT_SCHEDULE = "0 9 8 * *";
 const TZ = "America/Sao_Paulo";
 
 let scheduled = false;

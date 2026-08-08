@@ -110,7 +110,7 @@ Esperado:
 ```
 [API] ouvindo na porta 3000
 [OK] Conectado ao WhatsApp.
-[BOLETOS_CRON] agendado: "0 9 10 * *" (America/Sao_Paulo)
+[BOLETOS_CRON] agendado: "0 9 8 * *" (America/Sao_Paulo)
 [CONTRATO_REMINDER_CRON] agendado: "0 9 * * *" (America/Sao_Paulo)
 [ATRASO_CRON] agendado: "0 9 * * *" (America/Sao_Paulo)
 [FOLLOWUP] scheduler iniciado (checa a cada 60s)
