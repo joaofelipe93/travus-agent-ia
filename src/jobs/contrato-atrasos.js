@@ -2,9 +2,11 @@ import {
   getParcelasParaAcompanhar,
   updateParcelaStatus,
   bumpParcelaAtrasoLevel,
+  recordSystemEvent,
 } from "../db.js";
 import { getCobranca } from "../integrations/inter.js";
 import { sendWithPresence } from "../whatsapp/presence.js";
+import { alertConsultor } from "../utils/alerts.js";
 
 const PACING_MS = Number(process.env.ATRASO_PACING_MS ?? 1500);
 const INTER_CHECK_PACING_MS = Number(process.env.ATRASO_INTER_CHECK_PACING_MS ?? 300);
@@ -207,4 +209,25 @@ export async function runContratoAtrasos(sock) {
   }
 
   console.log(`[ATRASO] concluído: ${JSON.stringify(summary)}`);
+
+  const summaryTxt = `total=${summary.total} pagas=${summary.pagas_detectadas} d1=${summary.lembretes_d1} d5=${summary.lembretes_d5} d15=${summary.lembretes_d15} skip=${summary.skipados} erros=${summary.erros}`;
+  const totalAcoes = summary.pagas_detectadas + summary.lembretes_d1 + summary.lembretes_d5 + summary.lembretes_d15;
+
+  if (summary.total === 0) return;
+
+  if (totalAcoes === 0 && summary.erros > 0 && summary.skipados < summary.total) {
+    recordSystemEvent("error", "atrasos-cron", `FALHA CRÍTICA — nenhuma ação, todos com erro: ${summaryTxt}`, summary);
+    await alertConsultor(
+      `🚨 Cron de atrasos do contrato falhou CRITICAMENTE.\n\nNenhuma ação executada. ${summary.erros} erros. Summary: ${summaryTxt}`,
+      { dedupeKey: "atrasos-cron-total-fail", source: "atrasos-cron" },
+    );
+    return;
+  }
+
+  if (summary.erros > 0) {
+    recordSystemEvent("warn", "atrasos-cron", `concluído com falhas parciais: ${summaryTxt}`, summary);
+    return;
+  }
+
+  recordSystemEvent("info", "atrasos-cron", `concluído: ${summaryTxt}`, summary);
 }

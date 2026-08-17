@@ -30,7 +30,7 @@ export function startContratoRemindersCron() {
       const sock = getSock();
       try {
         await runContratoReminders(sock);
-        recordSystemEvent("info", "contrato-reminders-cron", "cron concluído com sucesso");
+        // runContratoReminders registra o resultado próprio baseado no summary
       } catch (err) {
         console.error(`[CONTRATO_REMINDER_CRON] erro no run: ${err?.message ?? err}`);
         await alertConsultor(
