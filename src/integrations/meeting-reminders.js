@@ -6,6 +6,7 @@ import {
   recordReminderSent,
   getReminderSentAt,
   hasUserMessageAfter,
+  recordSystemEvent,
 } from "../db.js";
 import { sendWithPresence } from "../whatsapp/presence.js";
 import { enqueue } from "../whatsapp/queue.js";
@@ -192,6 +193,7 @@ async function runReminders() {
           await sendWithPresence(currentSock, jid, message);
           recordReminderSent(event.id, "immediate");
           console.log(`[REMINDER] immediate → ${jid} (event=${event.id}, when=${when})`);
+          recordSystemEvent("info", "reminder", `immediate enviado (event=${event.id}, when=${when})`);
         } catch (err) {
           console.error(`[REMINDER] erro ao enviar immediate para ${jid}: ${err?.message ?? err}`);
         }
@@ -225,6 +227,7 @@ async function runReminders() {
           await sendWithPresence(currentSock, jid, message);
           recordReminderSent(event.id, type);
           console.log(`[REMINDER] ${type} → ${jid} (event=${event.id})`);
+          recordSystemEvent("info", "reminder", `${type} enviado (event=${event.id})`);
         } catch (err) {
           console.error(`[REMINDER] erro ao enviar ${type} para ${jid}: ${err?.message ?? err}`);
         }

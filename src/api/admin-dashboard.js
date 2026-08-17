@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { getSystemEventStats, countActiveConversations } from "../db.js";
+import { getSystemEventStats, countActiveConversations, getRecentSystemEvents } from "../db.js";
 import { getSock } from "./index.js";
 
 const TZ = "America/Sao_Paulo";
@@ -129,6 +129,14 @@ function renderHtml(stats, runtime) {
     .cron-info div { margin: 2px 0; }
     .status-ok { color: #1b8a3f; font-weight: 600; }
     .status-down { color: #b02a37; font-weight: 600; }
+    .timeline { max-height: 320px; overflow-y: auto; border: 1px solid rgba(128,128,128,0.3); border-radius: 6px; padding: 4px 12px; font-size: 0.85rem; }
+    .timeline .entry { padding: 6px 0; border-bottom: 1px solid rgba(128,128,128,0.1); display: grid; grid-template-columns: 90px 60px 160px 1fr; gap: 8px; align-items: baseline; }
+    .timeline .entry:last-child { border-bottom: none; }
+    .timeline .entry .t { opacity: 0.6; font-variant-numeric: tabular-nums; font-size: 0.8rem; }
+    .timeline .entry .src { font-weight: 600; opacity: 0.85; }
+    .timeline .entry .msg { word-break: break-word; }
+    .timeline .empty { padding: 20px; text-align: center; opacity: 0.6; }
+    .timeline-status { font-size: 0.75rem; opacity: 0.6; margin-top: 4px; }
     footer { margin-top: 30px; font-size: 0.8rem; opacity: 0.6; text-align: center; }
   </style>
 </head>
@@ -163,6 +171,73 @@ function renderHtml(stats, runtime) {
       <div class="sub">Node ${runtime.nodeVersion} · PID ${runtime.pid}</div>
     </div>
   </div>
+
+  <h2>Timeline <span id="tl-status" class="timeline-status">(carregando...)</span></h2>
+  <div id="timeline" class="timeline">
+    <div class="empty">Aguardando eventos...</div>
+  </div>
+
+  <script>
+    (function() {
+      const MAX_VISIBLE = 50;
+      const POLL_MS = 5000;
+      const tl = document.getElementById('timeline');
+      const statusEl = document.getElementById('tl-status');
+      let lastId = 0;
+      let pollHandle = null;
+
+      function fmtTime(unix) {
+        return new Date(unix * 1000).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+      }
+      function esc(s) {
+        const d = document.createElement('div');
+        d.textContent = s == null ? '' : String(s);
+        return d.innerHTML;
+      }
+      function render(events) {
+        if (events.length === 0 && tl.querySelector('.empty')) return;
+        if (tl.querySelector('.empty')) tl.innerHTML = '';
+        for (const e of events) {
+          const row = document.createElement('div');
+          row.className = 'entry';
+          row.innerHTML =
+            '<span class="t">' + fmtTime(e.created_at) + '</span>' +
+            '<span class="level level-' + esc(e.level) + '">' + esc(e.level) + '</span>' +
+            '<span class="src">' + esc(e.source) + '</span>' +
+            '<span class="msg">' + esc(e.message).slice(0, 300) + '</span>';
+          tl.insertBefore(row, tl.firstChild);
+          if (e.id > lastId) lastId = e.id;
+        }
+        while (tl.children.length > MAX_VISIBLE) tl.removeChild(tl.lastChild);
+      }
+      async function poll() {
+        try {
+          const params = new URLSearchParams({ since_id: String(lastId), limit: '100' });
+          const r = await fetch('/admin/events?' + params.toString());
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          const data = await r.json();
+          // API devolve DESC (mais recente primeiro). Pra prepend na ordem certa, iteramos invertido.
+          render(data.events.slice().reverse());
+          statusEl.textContent = '(atualizado ' + new Date().toLocaleTimeString('pt-BR') + ')';
+        } catch (err) {
+          statusEl.textContent = '(erro: ' + err.message + ')';
+        }
+      }
+      function startPolling() {
+        if (pollHandle) return;
+        poll();
+        pollHandle = setInterval(poll, POLL_MS);
+      }
+      function stopPolling() {
+        if (pollHandle) { clearInterval(pollHandle); pollHandle = null; }
+      }
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) stopPolling();
+        else startPolling();
+      });
+      startPolling();
+    })();
+  </script>
 
   <h2>Hoje</h2>
   <div class="grid">
@@ -230,6 +305,22 @@ export function adminDashboardJsonHandler(req, res) {
     res.json({ ...getSystemEventStats(), runtime: getRuntimeInfo() });
   } catch (err) {
     console.error(`[ADMIN] erro ao gerar JSON: ${err?.message ?? err}`);
+    res.status(500).json({ error: "internal", detail: err?.message });
+  }
+}
+
+export function adminEventsHandler(req, res) {
+  const auth = checkAuth(req);
+  if (!auth.ok) return res.status(auth.code).json({ error: auth.error });
+
+  try {
+    const sinceUnix = Number(req.query?.since) || 0;
+    const sinceId = Number(req.query?.since_id) || 0;
+    const limit = Number(req.query?.limit) || 100;
+    const events = getRecentSystemEvents({ sinceId, sinceUnix, limit });
+    res.json({ events, serverTime: Math.floor(Date.now() / 1000) });
+  } catch (err) {
+    console.error(`[ADMIN] erro em /admin/events: ${err?.message ?? err}`);
     res.status(500).json({ error: "internal", detail: err?.message });
   }
 }
