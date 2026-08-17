@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { cpus, loadavg } from "node:os";
 import { getSystemEventStats, countActiveConversations, getRecentSystemEvents } from "../db.js";
 import { getSock } from "./index.js";
 
@@ -28,11 +29,30 @@ function fmtUptime(seconds) {
   return parts.join(" ");
 }
 
+const CPU_COUNT = cpus().length || 1;
+let lastCpuSample = { cpu: process.cpuUsage(), hrtime: process.hrtime.bigint() };
+
+function sampleCpuPercent() {
+  const nowCpu = process.cpuUsage();
+  const nowHr = process.hrtime.bigint();
+  const elapsedMicros = Number(nowHr - lastCpuSample.hrtime) / 1000;
+  const cpuMicros = (nowCpu.user - lastCpuSample.cpu.user) + (nowCpu.system - lastCpuSample.cpu.system);
+  lastCpuSample = { cpu: nowCpu, hrtime: nowHr };
+  if (elapsedMicros < 1) return 0;
+  // % de UMA core; multi-core pode passar de 100.
+  const pctSingleCore = (cpuMicros / elapsedMicros) * 100;
+  // Normalizar como % do sistema total (todos os cores):
+  const pctSystem = pctSingleCore / CPU_COUNT;
+  return { single: Math.round(pctSingleCore * 10) / 10, system: Math.round(pctSystem * 10) / 10 };
+}
+
 function getRuntimeInfo() {
   const uptimeSec = process.uptime();
   const startTimeUnix = Math.floor(Date.now() / 1000 - uptimeSec);
   const mem = process.memoryUsage();
   const whatsappConnected = getSock() !== null;
+  const cpu = sampleCpuPercent();
+  const load = loadavg(); // [1min, 5min, 15min]
   let activeConversations = 0;
   try {
     activeConversations = countActiveConversations();
@@ -43,6 +63,11 @@ function getRuntimeInfo() {
     startedAt: startTimeUnix,
     memoryRssMB: Math.round(mem.rss / 1024 / 1024),
     memoryHeapMB: Math.round(mem.heapUsed / 1024 / 1024),
+    cpuPercentProcess: cpu.single,
+    cpuPercentSystem: cpu.system,
+    loadAvg1m: Math.round(load[0] * 100) / 100,
+    loadAvg5m: Math.round(load[1] * 100) / 100,
+    cpuCount: CPU_COUNT,
     nodeVersion: process.version,
     pid: process.pid,
     botVersion: getBotVersion(),
@@ -160,6 +185,16 @@ function renderHtml(stats, runtime) {
       <div class="label">Memória (RSS)</div>
       <div class="value">${runtime.memoryRssMB} MB</div>
       <div class="sub">heap: ${runtime.memoryHeapMB} MB</div>
+    </div>
+    <div class="card">
+      <div class="label">CPU (processo)</div>
+      <div class="value">${runtime.cpuPercentProcess}%</div>
+      <div class="sub">${runtime.cpuPercentSystem}% do sistema · ${runtime.cpuCount} cores</div>
+    </div>
+    <div class="card">
+      <div class="label">Load average</div>
+      <div class="value">${runtime.loadAvg1m}</div>
+      <div class="sub">5min: ${runtime.loadAvg5m}</div>
     </div>
     <div class="card">
       <div class="label">Conversas ativas</div>
