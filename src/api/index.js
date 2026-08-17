@@ -4,6 +4,7 @@ import { novoClienteWebhookHandler } from "./webhook-novo-cliente.js";
 import { emissaoContratoWebhookHandler } from "./webhook-emissao-contrato.js";
 import { confirmacaoInviteWebhookHandler } from "./webhook-confirmacao-invite.js";
 import { adminDashboardHtmlHandler, adminDashboardJsonHandler, adminEventsHandler } from "./admin-dashboard.js";
+import { recordSystemEvent } from "../db.js";
 
 let currentSock = null;
 let started = false;
@@ -39,5 +40,6 @@ export function startApi() {
   const port = Number(process.env.API_PORT ?? 3000);
   app.listen(port, () => {
     console.log(`[API] ouvindo na porta ${port}`);
+    recordSystemEvent("info", "boot", `API ouvindo na porta ${port}`);
   });
 }

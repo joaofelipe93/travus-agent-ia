@@ -13,7 +13,7 @@ import { startFollowUpScheduler } from "./followup.js";
 import { startMeetingReminderScheduler } from "../integrations/meeting-reminders.js";
 import { transcribeAudio } from "../integrations/whisper.js";
 import { setSock as setApiSock } from "../api/index.js";
-import { markCallAnswered, markMessageProcessed, pruneProcessedMessages } from "../db.js";
+import { markCallAnswered, markMessageProcessed, pruneProcessedMessages, recordSystemEvent } from "../db.js";
 
 const SESSION_DIR = "./.baileys-auth";
 const RECONNECT_DELAY_MS = 2000;
@@ -78,6 +78,7 @@ export async function startWhatsApp() {
 
     if (connection === "open") {
       console.log("[OK] Conectado ao WhatsApp. Aguardando mensagens...");
+      recordSystemEvent("info", "whatsapp", "Conectado ao WhatsApp");
       setApiSock(sock);
       startFollowUpScheduler(sock);
       startMeetingReminderScheduler(sock);
@@ -93,10 +94,12 @@ export async function startWhatsApp() {
 
       if (loggedOut) {
         console.log("[ERRO] Sessão deslogada. Apague a pasta .baileys-auth/ e rode novamente para reescanear o QR.");
+        recordSystemEvent("error", "whatsapp", "Sessão deslogada — precisa reescanear QR");
         process.exit(1);
       }
 
       console.log(`[AVISO] Conexão encerrada (code=${code}, msg=${msg}). Reconectando em ${RECONNECT_DELAY_MS}ms...`);
+      recordSystemEvent("warn", "whatsapp", `Conexão encerrada (code=${code}, msg=${msg}) — reconectando`);
       setTimeout(() => startWhatsApp(), RECONNECT_DELAY_MS);
     }
   });

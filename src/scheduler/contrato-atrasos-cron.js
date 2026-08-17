@@ -44,4 +44,5 @@ export function startContratoAtrasosCron() {
 
   scheduled = true;
   console.log(`[ATRASO_CRON] agendado: "${schedule}" (${TZ})`);
+  recordSystemEvent("info", "boot", `atrasos-cron agendado: "${schedule}" (${TZ})`);
 }

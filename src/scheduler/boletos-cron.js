@@ -44,4 +44,5 @@ export function startBoletosCron() {
 
   scheduled = true;
   console.log(`[BOLETOS_CRON] agendado: "${schedule}" (${TZ})`);
+  recordSystemEvent("info", "boot", `boletos-cron agendado: "${schedule}" (${TZ})`);
 }
