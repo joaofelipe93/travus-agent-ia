@@ -28,6 +28,12 @@ apt-get install -y nodejs
 echo "==> Instalando PM2 globalmente..."
 npm install -g pm2
 
+echo "==> Instalando pm2-logrotate (rotaciona logs em 10MB, mantém 7)..."
+pm2 install pm2-logrotate
+pm2 set pm2-logrotate:max_size 10M
+pm2 set pm2-logrotate:retain 7
+pm2 set pm2-logrotate:compress true
+
 echo "==> Criando usuário '$APP_USER' (sem login)..."
 id "$APP_USER" &>/dev/null || useradd --system --shell /usr/sbin/nologin --create-home "$APP_USER"
 
