@@ -1,4 +1,5 @@
 import { getSock } from "../api/index.js";
+import { recordSystemEvent } from "../db.js";
 
 const DEDUPE_WINDOW_MS = Number(process.env.ALERT_DEDUPE_WINDOW_MS ?? 60 * 60 * 1000);
 
@@ -19,7 +20,14 @@ function shouldSend(dedupeKey) {
   return true;
 }
 
-export async function alertConsultor(message, { dedupeKey, sock } = {}) {
+export async function alertConsultor(message, { dedupeKey, sock, source } = {}) {
+  // registra SEMPRE — mesmo se dedupado, dashboard mostra que aconteceu
+  try {
+    recordSystemEvent("error", source ?? dedupeKey ?? "alert", message, dedupeKey ? { dedupeKey } : undefined);
+  } catch (err) {
+    console.error(`[ALERT] falha ao registrar system_event: ${err?.message ?? err}`);
+  }
+
   const rawPhone = process.env.CONSULTOR_WHATSAPP;
   if (!rawPhone) {
     console.warn("[ALERT] CONSULTOR_WHATSAPP não configurado — alerta suprimido:", message);

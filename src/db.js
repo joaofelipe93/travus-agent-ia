@@ -129,6 +129,17 @@ db.exec(`
     dispatched_at INTEGER NOT NULL DEFAULT (unixepoch()),
     UNIQUE(person_id, stage_id)
   );
+
+  CREATE TABLE IF NOT EXISTS system_events (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    level      TEXT    NOT NULL,
+    source     TEXT    NOT NULL,
+    message    TEXT    NOT NULL,
+    meta_json  TEXT,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  );
+  CREATE INDEX IF NOT EXISTS idx_sys_events_created ON system_events(created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_sys_events_source ON system_events(source, created_at DESC);
 `);
 
 function ensureColumn(table, column, definition) {
@@ -645,4 +656,74 @@ export function updateLeadProfile(conversationId, fields) {
     db.prepare("UPDATE conversations SET updated_at = unixepoch() WHERE id = ?").run(conversationId);
   }
   return result.changes > 0;
+}
+
+const SYSTEM_EVENT_LEVELS = new Set(["info", "warn", "error"]);
+
+export function recordSystemEvent(level, source, message, meta) {
+  const lvl = SYSTEM_EVENT_LEVELS.has(level) ? level : "info";
+  const metaJson = meta != null ? JSON.stringify(meta) : null;
+  db.prepare(
+    "INSERT INTO system_events (level, source, message, meta_json) VALUES (?, ?, ?, ?)"
+  ).run(lvl, String(source ?? "unknown"), String(message ?? ""), metaJson);
+}
+
+export function getSystemEventStats() {
+  const startOfTodayUnix = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
+  const sevenDaysAgo = startOfTodayUnix - 6 * 86400;
+
+  const leadsToday = db
+    .prepare("SELECT COUNT(*) AS n FROM leads WHERE created_at >= ?")
+    .get(startOfTodayUnix).n;
+  const leads7d = db
+    .prepare("SELECT COUNT(*) AS n FROM leads WHERE created_at >= ?")
+    .get(sevenDaysAgo).n;
+  const leadsTotal = db.prepare("SELECT COUNT(*) AS n FROM leads").get().n;
+
+  const boletosToday = db
+    .prepare("SELECT COUNT(*) AS n FROM boletos_sent WHERE sent_at >= ?")
+    .get(startOfTodayUnix).n;
+  const boletos7d = db
+    .prepare("SELECT COUNT(*) AS n FROM boletos_sent WHERE sent_at >= ?")
+    .get(sevenDaysAgo).n;
+
+  const remindersToday = db
+    .prepare("SELECT COUNT(*) AS n FROM meeting_reminders WHERE sent_at >= ?")
+    .get(startOfTodayUnix).n;
+  const reminders7d = db
+    .prepare("SELECT COUNT(*) AS n FROM meeting_reminders WHERE sent_at >= ?")
+    .get(sevenDaysAgo).n;
+
+  const webhooksToday = db
+    .prepare("SELECT COUNT(*) AS n FROM webhook_dispatches WHERE dispatched_at >= ?")
+    .get(startOfTodayUnix).n;
+  const webhooks7d = db
+    .prepare("SELECT COUNT(*) AS n FROM webhook_dispatches WHERE dispatched_at >= ?")
+    .get(sevenDaysAgo).n;
+  const webhooksByStage = db
+    .prepare(
+      "SELECT stage_id, COUNT(*) AS n FROM webhook_dispatches WHERE dispatched_at >= ? GROUP BY stage_id ORDER BY n DESC"
+    )
+    .all(sevenDaysAgo);
+
+  const lastBoletosCron = db
+    .prepare(
+      "SELECT level, message, meta_json, created_at FROM system_events WHERE source = 'boletos-cron' ORDER BY id DESC LIMIT 1"
+    )
+    .get();
+
+  const recentErrors = db
+    .prepare(
+      "SELECT level, source, message, created_at FROM system_events WHERE level IN ('error','warn') ORDER BY id DESC LIMIT 20"
+    )
+    .all();
+
+  return {
+    leads: { today: leadsToday, last7d: leads7d, total: leadsTotal },
+    boletos: { today: boletosToday, last7d: boletos7d },
+    reminders: { today: remindersToday, last7d: reminders7d },
+    webhooks: { today: webhooksToday, last7d: webhooks7d, byStageLast7d: webhooksByStage },
+    lastBoletosCron: lastBoletosCron ?? null,
+    recentErrors,
+  };
 }

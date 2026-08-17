@@ -2,6 +2,7 @@ import cron from "node-cron";
 import { runMonthlyBoletos } from "../jobs/monthly-boletos.js";
 import { getSock } from "../api/index.js";
 import { alertConsultor } from "../utils/alerts.js";
+import { recordSystemEvent } from "../db.js";
 
 const DEFAULT_SCHEDULE = "0 9 8 * *";
 const TZ = "America/Sao_Paulo";
@@ -25,14 +26,16 @@ export function startBoletosCron() {
     schedule,
     async () => {
       console.log("[BOLETOS_CRON] disparado");
+      recordSystemEvent("info", "boletos-cron", "cron disparado");
       const sock = getSock();
       try {
         await runMonthlyBoletos(sock);
+        recordSystemEvent("info", "boletos-cron", "cron concluído com sucesso");
       } catch (err) {
         console.error(`[BOLETOS_CRON] erro no run: ${err?.message ?? err}`);
         await alertConsultor(
           `⚠️ Cron mensal de boletos (Canopus) falhou:\n\n${err?.message ?? err}\n\nVerifique os logs.`,
-          { dedupeKey: "boletos-cron-error" },
+          { dedupeKey: "boletos-cron-error", source: "boletos-cron" },
         );
       }
     },
