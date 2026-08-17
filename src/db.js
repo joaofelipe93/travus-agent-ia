@@ -662,6 +662,22 @@ export function countActiveConversations() {
   return db.prepare("SELECT COUNT(*) AS n FROM conversations WHERE status = 'active'").get().n;
 }
 
+export function getRecentSystemEvents({ sinceId = 0, sinceUnix = 0, limit = 100 } = {}) {
+  const cappedLimit = Math.min(Math.max(Number(limit) || 100, 1), 200);
+  if (Number(sinceId) > 0) {
+    return db
+      .prepare(
+        "SELECT id, level, source, message, created_at FROM system_events WHERE id > ? ORDER BY id DESC LIMIT ?"
+      )
+      .all(Number(sinceId), cappedLimit);
+  }
+  return db
+    .prepare(
+      "SELECT id, level, source, message, created_at FROM system_events WHERE created_at > ? ORDER BY id DESC LIMIT ?"
+    )
+    .all(Number(sinceUnix) || 0, cappedLimit);
+}
+
 const SYSTEM_EVENT_LEVELS = new Set(["info", "warn", "error"]);
 
 export function recordSystemEvent(level, source, message, meta) {

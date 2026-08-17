@@ -5,6 +5,7 @@ import {
   hasWebhookDispatched,
   recordWebhookDispatch,
   phoneFromJid,
+  recordSystemEvent,
 } from "../db.js";
 import { enqueue } from "../whatsapp/queue.js";
 import { sendWithPresence } from "../whatsapp/presence.js";
@@ -42,6 +43,8 @@ export async function piperunWebhookHandler(req, res) {
   const stageId = payload?.stage?.id;
   const nome = payload?.person?.name;
   const phone = pickPhone(payload?.person?.contact_phones);
+
+  recordSystemEvent("info", "webhook-piperun", `recebido: stage=${stageId ?? "?"} person=${personId ?? "?"}`);
 
   if (!personId || !stageId) {
     console.warn("[WEBHOOK] payload sem person.id ou stage.id, ignorando");

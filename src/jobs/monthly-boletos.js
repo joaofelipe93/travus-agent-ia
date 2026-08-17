@@ -9,6 +9,7 @@ import {
   upsertBoletoClient,
   recordBoletoSent,
   hasBoletoBeenSent,
+  recordSystemEvent,
 } from "../db.js";
 import { sendWithPresence } from "../whatsapp/presence.js";
 
@@ -199,6 +200,7 @@ async function processDeal(sock, deal) {
       });
       pdfsEnviados += 1;
       console.log(`[BOLETOS] deal ${dealId} (${nome}) → boleto ${filename} enviado para ${jid}`);
+      recordSystemEvent("info", "boletos", `boleto enviado: ${filename} (deal=${dealId})`);
     } catch (err) {
       console.error(`[BOLETOS] deal ${dealId} bill ${billId} → erro envio whatsapp: ${err?.message ?? err}`);
     }

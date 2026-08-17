@@ -5,6 +5,7 @@ import {
   phoneFromJid,
   getOrStartConversation,
   recordLeadCapture,
+  recordSystemEvent,
 } from "../db.js";
 import { enqueue } from "../whatsapp/queue.js";
 import { sendWithPresence } from "../whatsapp/presence.js";
@@ -72,6 +73,9 @@ export async function confirmacaoInviteWebhookHandler(req, res) {
   const personId = payload?.person?.id;
   const stageId = payload?.stage?.id;
   const status = payload?.status;
+
+  recordSystemEvent("info", "webhook-confirmacao-invite", `recebido: stage=${stageId ?? "?"} person=${personId ?? "?"} status=${status ?? "?"}`);
+
   const triggerType = payload?.action?.trigger_type;
   const dealTitle = payload?.title;
   const nome = payload?.person?.name;

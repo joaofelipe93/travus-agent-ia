@@ -6,6 +6,7 @@ import {
   addMessage,
   phoneFromJid,
   setConversationDealId,
+  recordSystemEvent,
 } from "../db.js";
 import { enqueue } from "../whatsapp/queue.js";
 import { sendWithPresence } from "../whatsapp/presence.js";
@@ -43,6 +44,8 @@ export async function novoClienteWebhookHandler(req, res) {
   const dealId = payload?.id;
   const personId = payload?.person?.id;
   const stageId = payload?.stage?.id;
+
+  recordSystemEvent("info", "webhook-novo-cliente", `recebido: deal=${dealId ?? "?"} person=${personId ?? "?"}`);
 
   if (!dealId || !personId || !stageId) {
     console.warn("[NOVO_CLIENTE] payload sem id (deal), person.id ou stage.id, ignorando");

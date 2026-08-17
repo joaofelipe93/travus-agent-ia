@@ -11,6 +11,7 @@ import {
   getContratoParcelas,
   recordLeadCapture,
   updateLeadProfile,
+  recordSystemEvent,
 } from "../db.js";
 import { sendWithPresence } from "../whatsapp/presence.js";
 import { getSock } from "./index.js";
@@ -209,6 +210,8 @@ export async function emissaoContratoWebhookHandler(req, res) {
   const personId = payload?.person?.id;
   const person = payload?.person;
   const nome = person?.name ?? "(sem nome)";
+
+  recordSystemEvent("info", "webhook-emissao-contrato", `recebido: deal=${dealId ?? "?"} stage=${stageId ?? "?"}`);
   // Procura o valor em múltiplos campos. Piperun pode ter:
   //   - payload.person.observation (campo "Observação" da pessoa, editável pelo consultor)
   //   - payload.observation (geralmente log automático: "15:50 ... Integração: ...")
