@@ -120,6 +120,7 @@ export function startMeetingReminderScheduler(sock) {
   intervalStarted = true;
   setInterval(runReminders, POLL_INTERVAL_MS);
   console.log("[REMINDER] scheduler de reuniões iniciado (poll cada 2min)");
+  recordSystemEvent("info", "boot", "reminder scheduler iniciado (poll cada 2min)");
 }
 
 async function runReminders() {

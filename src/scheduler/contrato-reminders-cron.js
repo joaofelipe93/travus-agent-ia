@@ -44,4 +44,5 @@ export function startContratoRemindersCron() {
 
   scheduled = true;
   console.log(`[CONTRATO_REMINDER_CRON] agendado: "${schedule}" (${TZ})`);
+  recordSystemEvent("info", "boot", `contrato-reminders-cron agendado: "${schedule}" (${TZ})`);
 }

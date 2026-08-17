@@ -3,6 +3,7 @@ import {
   checkFollowUpStillNeeded,
   markFollowUpSent,
   addMessage,
+  recordSystemEvent,
 } from "../db.js";
 import { sendWithPresence } from "./presence.js";
 import { enqueue } from "./queue.js";
@@ -26,6 +27,7 @@ export function startFollowUpScheduler(sock) {
   intervalStarted = true;
   setInterval(runFollowUps, CHECK_INTERVAL_MS);
   console.log("[FOLLOWUP] scheduler iniciado (checa a cada 60s)");
+  recordSystemEvent("info", "boot", "followup scheduler iniciado (checa a cada 60s)");
 }
 
 async function runFollowUps() {
