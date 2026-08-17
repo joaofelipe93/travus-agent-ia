@@ -1,6 +1,54 @@
-import { getSystemEventStats } from "../db.js";
+import { readFileSync } from "node:fs";
+import { getSystemEventStats, countActiveConversations } from "../db.js";
+import { getSock } from "./index.js";
 
 const TZ = "America/Sao_Paulo";
+
+let cachedVersion = null;
+function getBotVersion() {
+  if (cachedVersion) return cachedVersion;
+  try {
+    const pkg = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8"));
+    cachedVersion = pkg.version ?? "unknown";
+  } catch {
+    cachedVersion = "unknown";
+  }
+  return cachedVersion;
+}
+
+function fmtUptime(seconds) {
+  const s = Math.floor(seconds);
+  const days = Math.floor(s / 86400);
+  const hours = Math.floor((s % 86400) / 3600);
+  const minutes = Math.floor((s % 3600) / 60);
+  const parts = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0 || days > 0) parts.push(`${hours}h`);
+  parts.push(`${minutes}m`);
+  return parts.join(" ");
+}
+
+function getRuntimeInfo() {
+  const uptimeSec = process.uptime();
+  const startTimeUnix = Math.floor(Date.now() / 1000 - uptimeSec);
+  const mem = process.memoryUsage();
+  const whatsappConnected = getSock() !== null;
+  let activeConversations = 0;
+  try {
+    activeConversations = countActiveConversations();
+  } catch {}
+  return {
+    whatsappConnected,
+    uptimeSeconds: uptimeSec,
+    startedAt: startTimeUnix,
+    memoryRssMB: Math.round(mem.rss / 1024 / 1024),
+    memoryHeapMB: Math.round(mem.heapUsed / 1024 / 1024),
+    nodeVersion: process.version,
+    pid: process.pid,
+    botVersion: getBotVersion(),
+    activeConversations,
+  };
+}
 
 function checkAuth(req) {
   const expected = process.env.ADMIN_TOKEN;
@@ -24,7 +72,7 @@ function escapeHtml(s) {
     .replace(/'/g, "&#039;");
 }
 
-function renderHtml(stats) {
+function renderHtml(stats, runtime) {
   const errorRows = stats.recentErrors.length === 0
     ? '<tr><td colspan="4" class="empty">Nenhum evento de erro/warn recente 🎉</td></tr>'
     : stats.recentErrors.map((e) => `
@@ -79,11 +127,42 @@ function renderHtml(stats) {
     .level-error { background: rgba(220, 53, 69, 0.15); color: #b02a37; }
     .cron-info { padding: 10px; border: 1px solid rgba(128,128,128,0.3); border-radius: 6px; font-size: 0.9rem; }
     .cron-info div { margin: 2px 0; }
+    .status-ok { color: #1b8a3f; font-weight: 600; }
+    .status-down { color: #b02a37; font-weight: 600; }
     footer { margin-top: 30px; font-size: 0.8rem; opacity: 0.6; text-align: center; }
   </style>
 </head>
 <body>
   <h1>📊 Travus Bot — Admin Dashboard</h1>
+
+  <h2>Sistema</h2>
+  <div class="grid">
+    <div class="card">
+      <div class="label">WhatsApp</div>
+      <div class="value ${runtime.whatsappConnected ? "status-ok" : "status-down"}">
+        ${runtime.whatsappConnected ? "✅ Conectado" : "❌ Desconectado"}
+      </div>
+    </div>
+    <div class="card">
+      <div class="label">Uptime</div>
+      <div class="value">${fmtUptime(runtime.uptimeSeconds)}</div>
+      <div class="sub">desde ${fmtDateTime(runtime.startedAt)}</div>
+    </div>
+    <div class="card">
+      <div class="label">Memória (RSS)</div>
+      <div class="value">${runtime.memoryRssMB} MB</div>
+      <div class="sub">heap: ${runtime.memoryHeapMB} MB</div>
+    </div>
+    <div class="card">
+      <div class="label">Conversas ativas</div>
+      <div class="value">${runtime.activeConversations}</div>
+    </div>
+    <div class="card">
+      <div class="label">Versão</div>
+      <div class="value">v${runtime.botVersion}</div>
+      <div class="sub">Node ${runtime.nodeVersion} · PID ${runtime.pid}</div>
+    </div>
+  </div>
 
   <h2>Hoje</h2>
   <div class="grid">
@@ -135,7 +214,8 @@ export function adminDashboardHtmlHandler(req, res) {
 
   try {
     const stats = getSystemEventStats();
-    res.type("html").send(renderHtml(stats));
+    const runtime = getRuntimeInfo();
+    res.type("html").send(renderHtml(stats, runtime));
   } catch (err) {
     console.error(`[ADMIN] erro ao renderizar dashboard: ${err?.message ?? err}`);
     res.status(500).json({ error: "internal", detail: err?.message });
@@ -147,7 +227,7 @@ export function adminDashboardJsonHandler(req, res) {
   if (!auth.ok) return res.status(auth.code).json({ error: auth.error });
 
   try {
-    res.json(getSystemEventStats());
+    res.json({ ...getSystemEventStats(), runtime: getRuntimeInfo() });
   } catch (err) {
     console.error(`[ADMIN] erro ao gerar JSON: ${err?.message ?? err}`);
     res.status(500).json({ error: "internal", detail: err?.message });

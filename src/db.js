@@ -658,6 +658,10 @@ export function updateLeadProfile(conversationId, fields) {
   return result.changes > 0;
 }
 
+export function countActiveConversations() {
+  return db.prepare("SELECT COUNT(*) AS n FROM conversations WHERE status = 'active'").get().n;
+}
+
 const SYSTEM_EVENT_LEVELS = new Set(["info", "warn", "error"]);
 
 export function recordSystemEvent(level, source, message, meta) {
