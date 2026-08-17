@@ -3,6 +3,7 @@ import { piperunWebhookHandler } from "./webhook-piperun.js";
 import { novoClienteWebhookHandler } from "./webhook-novo-cliente.js";
 import { emissaoContratoWebhookHandler } from "./webhook-emissao-contrato.js";
 import { confirmacaoInviteWebhookHandler } from "./webhook-confirmacao-invite.js";
+import { adminDashboardHtmlHandler, adminDashboardJsonHandler } from "./admin-dashboard.js";
 
 let currentSock = null;
 let started = false;
@@ -30,6 +31,9 @@ export function startApi() {
   app.post("/webhook/piperun/novo-cliente", novoClienteWebhookHandler);
   app.post("/webhook/piperun/emissao-contrato", emissaoContratoWebhookHandler);
   app.post("/webhook/piperun/confirmacao-invite", confirmacaoInviteWebhookHandler);
+
+  app.get("/admin/dashboard", adminDashboardHtmlHandler);
+  app.get("/admin/dashboard.json", adminDashboardJsonHandler);
 
   const port = Number(process.env.API_PORT ?? 3000);
   app.listen(port, () => {

@@ -2,6 +2,7 @@ import cron from "node-cron";
 import { runContratoReminders } from "../jobs/contrato-reminders.js";
 import { getSock } from "../api/index.js";
 import { alertConsultor } from "../utils/alerts.js";
+import { recordSystemEvent } from "../db.js";
 
 const DEFAULT_SCHEDULE = "0 9 * * *";
 const TZ = "America/Sao_Paulo";
@@ -25,14 +26,16 @@ export function startContratoRemindersCron() {
     schedule,
     async () => {
       console.log("[CONTRATO_REMINDER_CRON] disparado");
+      recordSystemEvent("info", "contrato-reminders-cron", "cron disparado");
       const sock = getSock();
       try {
         await runContratoReminders(sock);
+        recordSystemEvent("info", "contrato-reminders-cron", "cron concluído com sucesso");
       } catch (err) {
         console.error(`[CONTRATO_REMINDER_CRON] erro no run: ${err?.message ?? err}`);
         await alertConsultor(
           `⚠️ Cron de lembretes de parcelas do contrato falhou:\n\n${err?.message ?? err}`,
-          { dedupeKey: "contrato-reminders-cron-error" },
+          { dedupeKey: "contrato-reminders-cron-error", source: "contrato-reminders-cron" },
         );
       }
     },
