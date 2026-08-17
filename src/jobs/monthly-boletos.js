@@ -12,6 +12,7 @@ import {
   recordSystemEvent,
 } from "../db.js";
 import { sendWithPresence } from "../whatsapp/presence.js";
+import { alertConsultor } from "../utils/alerts.js";
 
 const STAGE_ID = Number(process.env.PIPERUN_BOLETOS_STAGE_ID ?? 679217);
 const PACING_MS = Number(process.env.BOLETOS_PACING_MS ?? 3000);
@@ -223,6 +224,11 @@ function sleep(ms) {
 export async function runMonthlyBoletos(sock) {
   if (!sock) {
     console.warn("[BOLETOS] WhatsApp não conectado, abortando run mensal");
+    recordSystemEvent("error", "boletos-cron", "abortado: WhatsApp não conectado");
+    await alertConsultor(
+      "⚠️ Cron mensal de boletos abortado: WhatsApp não conectado no momento do disparo.",
+      { dedupeKey: "boletos-cron-no-sock", source: "boletos-cron" },
+    );
     return;
   }
   console.log(`[BOLETOS] iniciando rotina mensal — stage_id=${STAGE_ID}`);
@@ -232,6 +238,11 @@ export async function runMonthlyBoletos(sock) {
     deals = await listDealsByStage(STAGE_ID);
   } catch (err) {
     console.error(`[BOLETOS] erro ao listar deals da etapa ${STAGE_ID}: ${err?.message ?? err}`);
+    recordSystemEvent("error", "boletos-cron", `falha ao listar deals no Piperun: ${err?.message ?? err}`);
+    await alertConsultor(
+      `⚠️ Cron mensal de boletos falhou ao listar deals do Piperun:\n\n${err?.message ?? err}`,
+      { dedupeKey: "boletos-cron-piperun-list", source: "boletos-cron" },
+    );
     return;
   }
 
@@ -270,4 +281,32 @@ export async function runMonthlyBoletos(sock) {
   }
 
   console.log(`[BOLETOS] rotina mensal concluída: ${JSON.stringify(summary)}`);
+
+  // Avalia summary e registra system_event com level correto
+  const summaryTxt = `total=${summary.total} pdfs=${summary.pdfs_enviados} ok=${summary.ok} erros=${summary.erros} sem_cpf=${summary.sem_cpf} sem_tel=${summary.sem_telefone} fora_wa=${summary.fora_do_whatsapp} sem_cotas=${summary.sem_cotas} sem_bills=${summary.sem_bills}`;
+
+  if (summary.total === 0) {
+    recordSystemEvent("info", "boletos-cron", `concluído sem deals no stage ${STAGE_ID}`, summary);
+    return;
+  }
+
+  if (summary.pdfs_enviados === 0 && summary.erros > 0) {
+    recordSystemEvent("error", "boletos-cron", `FALHA CRÍTICA — nenhum boleto enviado, todos com erro: ${summaryTxt}`, summary);
+    await alertConsultor(
+      `🚨 Cron mensal de boletos falhou CRITICAMENTE.\n\nNenhum boleto foi enviado. ${summary.erros} de ${summary.total} deals tiveram erro (provável: Render proxy fora ou Canopus indisponível).\n\nSummary: ${summaryTxt}`,
+      { dedupeKey: "boletos-cron-total-fail", source: "boletos-cron" },
+    );
+    return;
+  }
+
+  if (summary.erros > 0) {
+    recordSystemEvent("warn", "boletos-cron", `concluído com falhas parciais: ${summaryTxt}`, summary);
+    await alertConsultor(
+      `⚠️ Cron mensal de boletos concluído com falhas parciais.\n\n${summary.pdfs_enviados} boletos enviados, ${summary.erros} deals com erro.\n\nSummary: ${summaryTxt}`,
+      { dedupeKey: "boletos-cron-partial-fail", source: "boletos-cron" },
+    );
+    return;
+  }
+
+  recordSystemEvent("info", "boletos-cron", `concluído com sucesso: ${summaryTxt}`, summary);
 }

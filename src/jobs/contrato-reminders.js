@@ -1,9 +1,11 @@
 import {
   getParcelasParaLembrar,
   markContratoParcelaPdfSent,
+  recordSystemEvent,
 } from "../db.js";
 import { getBoletoPdf } from "../integrations/inter.js";
 import { sendWithPresence } from "../whatsapp/presence.js";
+import { alertConsultor } from "../utils/alerts.js";
 
 const WINDOW_DAYS = Number(process.env.CONTRATO_REMINDER_WINDOW_DIAS ?? 10);
 const PACING_MS = Number(process.env.CONTRATO_REMINDER_PACING_MS ?? 1500);
@@ -101,4 +103,25 @@ export async function runContratoReminders(sock) {
   }
 
   console.log(`[CONTRATO_REMINDER] concluído: ${JSON.stringify(summary)}`);
+
+  const summaryTxt = `total=${summary.total} enviadas=${summary.enviadas} sem_jid=${summary.sem_jid} pdf_falhou=${summary.pdf_falhou} envio_falhou=${summary.envio_falhou}`;
+  const totalErros = summary.pdf_falhou + summary.envio_falhou;
+
+  if (summary.total === 0) return; // silencioso — dia sem parcelas pra lembrar é normal
+
+  if (summary.enviadas === 0 && totalErros > 0) {
+    recordSystemEvent("error", "contrato-reminders-cron", `FALHA CRÍTICA — nenhum lembrete enviado: ${summaryTxt}`, summary);
+    await alertConsultor(
+      `🚨 Cron de lembretes de parcelas do contrato falhou CRITICAMENTE.\n\nNenhum lembrete foi enviado. Summary: ${summaryTxt}`,
+      { dedupeKey: "contrato-reminders-total-fail", source: "contrato-reminders-cron" },
+    );
+    return;
+  }
+
+  if (totalErros > 0) {
+    recordSystemEvent("warn", "contrato-reminders-cron", `concluído com falhas parciais: ${summaryTxt}`, summary);
+    return;
+  }
+
+  recordSystemEvent("info", "contrato-reminders-cron", `concluído: ${summaryTxt}`, summary);
 }

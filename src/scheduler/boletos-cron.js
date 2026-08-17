@@ -30,12 +30,12 @@ export function startBoletosCron() {
       const sock = getSock();
       try {
         await runMonthlyBoletos(sock);
-        recordSystemEvent("info", "boletos-cron", "cron concluído com sucesso");
+        // runMonthlyBoletos registra o resultado próprio (info/warn/error) baseado no summary
       } catch (err) {
         console.error(`[BOLETOS_CRON] erro no run: ${err?.message ?? err}`);
         await alertConsultor(
-          `⚠️ Cron mensal de boletos (Canopus) falhou:\n\n${err?.message ?? err}\n\nVerifique os logs.`,
-          { dedupeKey: "boletos-cron-error", source: "boletos-cron" },
+          `⚠️ Cron mensal de boletos (Canopus) — exceção não tratada:\n\n${err?.message ?? err}\n\nVerifique os logs.`,
+          { dedupeKey: "boletos-cron-uncaught", source: "boletos-cron" },
         );
       }
     },

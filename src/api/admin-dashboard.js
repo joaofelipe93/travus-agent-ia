@@ -115,11 +115,21 @@ function renderHtml(stats, runtime) {
         <tr><td>${escapeHtml(w.stage_id)}</td><td class="num">${w.n}</td></tr>
       `).join("");
 
+  function renderCronMeta(metaJson) {
+    if (!metaJson) return "";
+    let meta;
+    try { meta = JSON.parse(metaJson); } catch { return ""; }
+    if (!meta || typeof meta !== "object") return "";
+    const entries = Object.entries(meta).filter(([, v]) => typeof v === "number");
+    if (entries.length === 0) return "";
+    return `<div class="cron-meta">${entries.map(([k, v]) => `<span class="chip"><b>${escapeHtml(k)}</b>: ${v}</span>`).join("")}</div>`;
+  }
+
   const cronBoletos = stats.lastBoletosCron
     ? `<div class="cron-info">
-        <div>Último: <strong>${fmtDateTime(stats.lastBoletosCron.created_at)}</strong></div>
-        <div>Nível: <span class="level level-${stats.lastBoletosCron.level}">${stats.lastBoletosCron.level}</span></div>
+        <div>Último: <strong>${fmtDateTime(stats.lastBoletosCron.created_at)}</strong> · <span class="level level-${stats.lastBoletosCron.level}">${stats.lastBoletosCron.level}</span></div>
         <div>Msg: ${escapeHtml(stats.lastBoletosCron.message)}</div>
+        ${renderCronMeta(stats.lastBoletosCron.meta_json)}
       </div>`
     : '<div class="empty">Cron ainda não registrado (aguarde próximo dia 8)</div>';
 
@@ -152,6 +162,9 @@ function renderHtml(stats, runtime) {
     .level-error { background: rgba(220, 53, 69, 0.15); color: #b02a37; }
     .cron-info { padding: 10px; border: 1px solid rgba(128,128,128,0.3); border-radius: 6px; font-size: 0.9rem; }
     .cron-info div { margin: 2px 0; }
+    .cron-meta { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; }
+    .cron-meta .chip { background: rgba(128,128,128,0.1); padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; }
+    .cron-meta .chip b { font-weight: 600; }
     .status-ok { color: #1b8a3f; font-weight: 600; }
     .status-down { color: #b02a37; font-weight: 600; }
     .timeline { max-height: 320px; overflow-y: auto; border: 1px solid rgba(128,128,128,0.3); border-radius: 6px; padding: 4px 12px; font-size: 0.85rem; }

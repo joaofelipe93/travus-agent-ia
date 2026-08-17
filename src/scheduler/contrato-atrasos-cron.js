@@ -30,7 +30,7 @@ export function startContratoAtrasosCron() {
       const sock = getSock();
       try {
         await runContratoAtrasos(sock);
-        recordSystemEvent("info", "atrasos-cron", "cron concluído com sucesso");
+        // runContratoAtrasos registra o resultado próprio baseado no summary
       } catch (err) {
         console.error(`[ATRASO_CRON] erro no run: ${err?.message ?? err}`);
         await alertConsultor(
