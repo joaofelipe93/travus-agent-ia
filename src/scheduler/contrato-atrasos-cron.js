@@ -1,6 +1,7 @@
 import cron from "node-cron";
 import { runContratoAtrasos } from "../jobs/contrato-atrasos.js";
 import { getSock } from "../api/index.js";
+import { alertConsultor } from "../utils/alerts.js";
 
 const DEFAULT_SCHEDULE = "0 9 * * *";
 const TZ = "America/Sao_Paulo";
@@ -29,6 +30,10 @@ export function startContratoAtrasosCron() {
         await runContratoAtrasos(sock);
       } catch (err) {
         console.error(`[ATRASO_CRON] erro no run: ${err?.message ?? err}`);
+        await alertConsultor(
+          `⚠️ Cron de atrasos do contrato falhou:\n\n${err?.message ?? err}`,
+          { dedupeKey: "atrasos-cron-error" },
+        );
       }
     },
     { timezone: TZ }

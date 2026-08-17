@@ -9,6 +9,7 @@ import {
 } from "../db.js";
 import { sendWithPresence } from "../whatsapp/presence.js";
 import { enqueue } from "../whatsapp/queue.js";
+import { alertConsultor } from "../utils/alerts.js";
 
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID ?? "primary";
 const POLL_INTERVAL_MS = 2 * 60 * 1000;
@@ -139,6 +140,10 @@ async function runReminders() {
     events = res.data.items ?? [];
   } catch (err) {
     console.error(`[REMINDER] erro ao consultar Calendar: ${err?.message ?? err}`);
+    await alertConsultor(
+      `⚠️ Reminder scheduler falhou ao consultar Google Calendar:\n\n${err?.message ?? err}\n\nLembretes de reunião não estão saindo. Verifique credenciais do service account.`,
+      { dedupeKey: "reminder-calendar-error", sock: currentSock },
+    );
     return;
   }
 

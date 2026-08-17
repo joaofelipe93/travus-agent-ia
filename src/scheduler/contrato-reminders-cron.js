@@ -1,6 +1,7 @@
 import cron from "node-cron";
 import { runContratoReminders } from "../jobs/contrato-reminders.js";
 import { getSock } from "../api/index.js";
+import { alertConsultor } from "../utils/alerts.js";
 
 const DEFAULT_SCHEDULE = "0 9 * * *";
 const TZ = "America/Sao_Paulo";
@@ -29,6 +30,10 @@ export function startContratoRemindersCron() {
         await runContratoReminders(sock);
       } catch (err) {
         console.error(`[CONTRATO_REMINDER_CRON] erro no run: ${err?.message ?? err}`);
+        await alertConsultor(
+          `⚠️ Cron de lembretes de parcelas do contrato falhou:\n\n${err?.message ?? err}`,
+          { dedupeKey: "contrato-reminders-cron-error" },
+        );
       }
     },
     { timezone: TZ }
