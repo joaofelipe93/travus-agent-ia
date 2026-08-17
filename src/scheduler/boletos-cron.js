@@ -1,6 +1,7 @@
 import cron from "node-cron";
 import { runMonthlyBoletos } from "../jobs/monthly-boletos.js";
 import { getSock } from "../api/index.js";
+import { alertConsultor } from "../utils/alerts.js";
 
 const DEFAULT_SCHEDULE = "0 9 8 * *";
 const TZ = "America/Sao_Paulo";
@@ -29,6 +30,10 @@ export function startBoletosCron() {
         await runMonthlyBoletos(sock);
       } catch (err) {
         console.error(`[BOLETOS_CRON] erro no run: ${err?.message ?? err}`);
+        await alertConsultor(
+          `⚠️ Cron mensal de boletos (Canopus) falhou:\n\n${err?.message ?? err}\n\nVerifique os logs.`,
+          { dedupeKey: "boletos-cron-error" },
+        );
       }
     },
     { timezone: TZ }

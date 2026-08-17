@@ -16,11 +16,11 @@ import { sendWithPresence } from "../whatsapp/presence.js";
 import { getSock } from "./index.js";
 import { createCobranca, getBoletoPdf } from "../integrations/inter.js";
 import { renderContrato, renderContratoPdf } from "../integrations/contrato-template.js";
+import { alertConsultor } from "../utils/alerts.js";
 
 const TRIGGER_STAGE_ID = Number(process.env.INTER_CONTRATO_STAGE_ID ?? 654265);
 const MULTA_PCT = Number(process.env.INTER_CONTRATO_MULTA_PCT ?? 2);
 const MORA_PCT = Number(process.env.INTER_CONTRATO_MORA_PCT ?? 1);
-const CONSULTOR_WHATSAPP = process.env.CONSULTOR_WHATSAPP ?? null;
 const COBRANCA_DELAY_MS = Number(process.env.INTER_COBRANCA_DELAY_MS ?? 500);
 const PDF_DELAY_MS = Number(process.env.INTER_PDF_DELAY_MS ?? 1500);
 
@@ -170,14 +170,7 @@ export function parseObservation(text) {
 }
 
 async function notifyConsultor(sock, message) {
-  if (!CONSULTOR_WHATSAPP || !sock) return;
-  const jid = `${cleanDigits(CONSULTOR_WHATSAPP)}@s.whatsapp.net`;
-  try {
-    await sendWithPresence(sock, jid, message);
-    console.log(`[CONTRATO] consultor notificado → ${jid}`);
-  } catch (err) {
-    console.error(`[CONTRATO] falha ao notificar consultor: ${err?.message ?? err}`);
-  }
+  return alertConsultor(message, { sock });
 }
 
 function buildPayloadParcela({ dealId, person, parcelaN, valor, vencimento }) {
