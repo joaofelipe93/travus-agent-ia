@@ -1,4 +1,5 @@
 import "dotenv/config";
+import "./utils/logger.js"; // ativa filtro do barulho do libsignal — deve vir antes do baileys
 import { startWhatsApp } from "./whatsapp/index.js";
 import { startApi } from "./api/index.js";
 import { startBoletosCron } from "./scheduler/boletos-cron.js";
