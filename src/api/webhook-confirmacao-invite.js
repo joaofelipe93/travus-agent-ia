@@ -85,6 +85,7 @@ export async function confirmacaoInviteWebhookHandler(req, res) {
 
   if (!personId || !stageId) {
     console.warn("[CONFIRMA-INVITE] payload sem person.id ou stage.id, ignorando");
+    recordSystemEvent("warn", "webhook-confirmacao-invite", "payload sem person.id ou stage.id, ignorando");
     return res.status(400).json({ error: "missing person.id or stage.id" });
   }
 
@@ -102,6 +103,7 @@ export async function confirmacaoInviteWebhookHandler(req, res) {
 
   if (!phone) {
     console.warn(`[CONFIRMA-INVITE] person_id=${personId} sem telefone identificável`);
+    recordSystemEvent("warn", "webhook-confirmacao-invite", `person_id=${personId} sem telefone identificável`);
     return res.status(400).json({ error: "no contact phone in payload" });
   }
 
@@ -113,6 +115,7 @@ export async function confirmacaoInviteWebhookHandler(req, res) {
   const sock = getSock();
   if (!sock) {
     console.warn("[CONFIRMA-INVITE] WhatsApp não conectado, retornando 503 pra Piperun retentar");
+    recordSystemEvent("warn", "webhook-confirmacao-invite", "WhatsApp não conectado, retornando 503 pra Piperun retentar");
     return res.status(503).json({ error: "whatsapp not connected" });
   }
 
@@ -121,11 +124,13 @@ export async function confirmacaoInviteWebhookHandler(req, res) {
     [onWa] = await sock.onWhatsApp(phone);
   } catch (err) {
     console.error(`[CONFIRMA-INVITE] erro onWhatsApp(${phone}): ${err?.message ?? err}`);
+    recordSystemEvent("error", "webhook-confirmacao-invite", `erro onWhatsApp(${phone}): ${err?.message ?? err}`);
     return res.status(502).json({ error: "whatsapp lookup failed" });
   }
 
   if (!onWa?.exists) {
     console.warn(`[CONFIRMA-INVITE] número ${phone} não existe no WhatsApp — não enviando`);
+    recordSystemEvent("warn", "webhook-confirmacao-invite", `número ${phone} não existe no WhatsApp (person_id=${personId}) — não enviando`);
     return res.status(404).json({ error: "phone not on whatsapp", phone });
   }
 
@@ -184,6 +189,7 @@ export async function confirmacaoInviteWebhookHandler(req, res) {
       console.log(`[CONFIRMA-INVITE] lead registrado no DB: conv=${convId} celular=${canonicalPhone}`);
     } catch (err) {
       console.error(`[CONFIRMA-INVITE] falha ao registrar lead no DB: ${err?.message ?? err}`);
+      recordSystemEvent("error", "webhook-confirmacao-invite", `falha ao registrar lead no DB (person_id=${personId}): ${err?.message ?? err}`);
     }
 
     try {
@@ -191,6 +197,7 @@ export async function confirmacaoInviteWebhookHandler(req, res) {
       console.log(`[CONFIRMA-INVITE] enviado person_id=${personId} → ${jid}`);
     } catch (err) {
       console.error(`[CONFIRMA-INVITE] erro ao enviar para ${jid}: ${err?.message ?? err}`);
+      recordSystemEvent("error", "webhook-confirmacao-invite", `erro ao enviar confirmação para ${jid} (person_id=${personId}): ${err?.message ?? err}`);
     }
   });
 }
