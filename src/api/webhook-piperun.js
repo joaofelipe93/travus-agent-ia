@@ -48,11 +48,13 @@ export async function piperunWebhookHandler(req, res) {
 
   if (!personId || !stageId) {
     console.warn("[WEBHOOK] payload sem person.id ou stage.id, ignorando");
+    recordSystemEvent("warn", "webhook-piperun", "payload sem person.id ou stage.id, ignorando");
     return res.status(400).json({ error: "missing person.id or stage.id" });
   }
 
   if (!phone) {
     console.warn(`[WEBHOOK] person_id=${personId} sem telefone identificável`);
+    recordSystemEvent("warn", "webhook-piperun", `person_id=${personId} sem telefone identificável`);
     return res.status(400).json({ error: "no contact phone in payload" });
   }
 
@@ -64,6 +66,7 @@ export async function piperunWebhookHandler(req, res) {
   const sock = getSock();
   if (!sock) {
     console.warn("[WEBHOOK] WhatsApp não conectado, retornando 503 pra Piperun retentar");
+    recordSystemEvent("warn", "webhook-piperun", "WhatsApp não conectado, retornando 503 pra Piperun retentar");
     return res.status(503).json({ error: "whatsapp not connected" });
   }
 
@@ -72,11 +75,13 @@ export async function piperunWebhookHandler(req, res) {
     [result] = await sock.onWhatsApp(phone);
   } catch (err) {
     console.error(`[WEBHOOK] erro ao consultar onWhatsApp(${phone}): ${err?.message ?? err}`);
+    recordSystemEvent("error", "webhook-piperun", `erro ao consultar onWhatsApp(${phone}): ${err?.message ?? err}`);
     return res.status(502).json({ error: "whatsapp lookup failed" });
   }
 
   if (!result?.exists) {
     console.warn(`[WEBHOOK] número ${phone} não existe no WhatsApp — não enviando`);
+    recordSystemEvent("warn", "webhook-piperun", `número ${phone} não existe no WhatsApp (person_id=${personId}) — não enviando`);
     return res.status(404).json({ error: "phone not on whatsapp", phone });
   }
 
@@ -108,6 +113,7 @@ export async function piperunWebhookHandler(req, res) {
       console.log(`[WEBHOOK] enviado: msg + PDF para ${jid}`);
     } catch (err) {
       console.error(`[WEBHOOK] erro ao enviar para ${jid}: ${err?.message ?? err}`);
+      recordSystemEvent("error", "webhook-piperun", `erro ao enviar material para ${jid} (person_id=${personId}): ${err?.message ?? err}`);
     }
   });
 

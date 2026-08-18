@@ -49,6 +49,7 @@ export async function novoClienteWebhookHandler(req, res) {
 
   if (!dealId || !personId || !stageId) {
     console.warn("[NOVO_CLIENTE] payload sem id (deal), person.id ou stage.id, ignorando");
+    recordSystemEvent("warn", "webhook-novo-cliente", "payload sem id (deal), person.id ou stage.id, ignorando");
     return res.status(400).json({ error: "missing id, person.id or stage.id" });
   }
 
@@ -68,11 +69,13 @@ export async function novoClienteWebhookHandler(req, res) {
     person = await getPerson(personId);
   } catch (err) {
     console.error(`[NOVO_CLIENTE] erro ao buscar pessoa ${personId}: ${err?.message ?? err}`);
+    recordSystemEvent("error", "webhook-novo-cliente", `erro ao buscar pessoa ${personId}: ${err?.message ?? err}`);
     return res.status(502).json({ error: "piperun api failure" });
   }
 
   if (!person) {
     console.warn(`[NOVO_CLIENTE] pessoa ${personId} não encontrada na API`);
+    recordSystemEvent("warn", "webhook-novo-cliente", `pessoa ${personId} não encontrada na API`);
     return res.status(404).json({ error: "person not found" });
   }
 
@@ -81,12 +84,14 @@ export async function novoClienteWebhookHandler(req, res) {
 
   if (!phone) {
     console.warn(`[NOVO_CLIENTE] person_id=${personId} sem telefone identificável`);
+    recordSystemEvent("warn", "webhook-novo-cliente", `person_id=${personId} sem telefone identificável`);
     return res.status(400).json({ error: "no contact phone available" });
   }
 
   const sock = getSock();
   if (!sock) {
     console.warn("[NOVO_CLIENTE] WhatsApp não conectado, retornando 503 pra Piperun retentar");
+    recordSystemEvent("warn", "webhook-novo-cliente", "WhatsApp não conectado, retornando 503 pra Piperun retentar");
     return res.status(503).json({ error: "whatsapp not connected" });
   }
 
@@ -95,11 +100,13 @@ export async function novoClienteWebhookHandler(req, res) {
     [lookup] = await sock.onWhatsApp(phone);
   } catch (err) {
     console.error(`[NOVO_CLIENTE] erro ao consultar onWhatsApp(${phone}): ${err?.message ?? err}`);
+    recordSystemEvent("error", "webhook-novo-cliente", `erro ao consultar onWhatsApp(${phone}): ${err?.message ?? err}`);
     return res.status(502).json({ error: "whatsapp lookup failed" });
   }
 
   if (!lookup?.exists) {
     console.warn(`[NOVO_CLIENTE] número ${phone} não existe no WhatsApp — não enviando`);
+    recordSystemEvent("warn", "webhook-novo-cliente", `número ${phone} não existe no WhatsApp (person_id=${personId}) — não enviando`);
     return res.status(404).json({ error: "phone not on whatsapp", phone });
   }
 
@@ -124,6 +131,7 @@ export async function novoClienteWebhookHandler(req, res) {
       console.log(`[NOVO_CLIENTE] mensagem inicial enviada para ${jid}`);
     } catch (err) {
       console.error(`[NOVO_CLIENTE] erro ao ENVIAR mensagem para ${jid}: ${err?.message ?? err}`);
+      recordSystemEvent("error", "webhook-novo-cliente", `erro ao enviar mensagem inicial para ${jid} (deal=${dealId}): ${err?.message ?? err}`);
     }
 
     if (sent) {
@@ -134,6 +142,7 @@ export async function novoClienteWebhookHandler(req, res) {
         console.log(`[NOVO_CLIENTE] gravado em conv_id=${convId} (deal_id=${dealId})`);
       } catch (err) {
         console.error(`[NOVO_CLIENTE] mensagem entregue mas erro ao persistir local: ${err?.message ?? err}`);
+        recordSystemEvent("error", "webhook-novo-cliente", `mensagem entregue mas erro ao persistir local (deal=${dealId}): ${err?.message ?? err}`);
       }
 
       try {
@@ -141,6 +150,7 @@ export async function novoClienteWebhookHandler(req, res) {
         console.log(`[NOVO_CLIENTE] deal ${dealId} movido para stage ${DESTINATION_STAGE_ID}`);
       } catch (err) {
         console.error(`[NOVO_CLIENTE] erro ao mover deal ${dealId} para stage ${DESTINATION_STAGE_ID}: ${err?.message ?? err}`);
+        recordSystemEvent("error", "webhook-novo-cliente", `erro ao mover deal ${dealId} para stage ${DESTINATION_STAGE_ID}: ${err?.message ?? err}`);
       }
     }
   });
